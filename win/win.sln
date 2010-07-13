@@ -1,0 +1,26 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 9.00
+# Visual Studio 2005
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "client", "client\client.vcproj", "{2F68D9AF-3FA7-4735-897F-010E579D9510}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "server", "server\server.vcproj", "{FDBA3EEC-2002-4630-908F-FFB7631ADB52}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Win32 = Debug|Win32
+		Release|Win32 = Release|Win32
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{2F68D9AF-3FA7-4735-897F-010E579D9510}.Debug|Win32.ActiveCfg = Debug|Win32
+		{2F68D9AF-3FA7-4735-897F-010E579D9510}.Debug|Win32.Build.0 = Debug|Win32
+		{2F68D9AF-3FA7-4735-897F-010E579D9510}.Release|Win32.ActiveCfg = Release|Win32
+		{2F68D9AF-3FA7-4735-897F-010E579D9510}.Release|Win32.Build.0 = Release|Win32
+		{FDBA3EEC-2002-4630-908F-FFB7631ADB52}.Debug|Win32.ActiveCfg = Debug|Win32
+		{FDBA3EEC-2002-4630-908F-FFB7631ADB52}.Debug|Win32.Build.0 = Debug|Win32
+		{FDBA3EEC-2002-4630-908F-FFB7631ADB52}.Release|Win32.ActiveCfg = Release|Win32
+		{FDBA3EEC-2002-4630-908F-FFB7631ADB52}.Release|Win32.Build.0 = Release|Win32
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
