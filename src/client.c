@@ -244,6 +244,13 @@ int main(int ac, char *av[])
 		exit(EXIT_FAILOPT);
 	}
 
+	if (opts.ai_protocol == IPPROTO_UDP && opts.tx_packet_size > MAX_UDP_DATAGRAM) {
+		err_msg("UDP datagram size to send to large and exceed Ethernet Jumbogram size (%d > %d(max))\n"
+				"If you want to adjust this value see MAX_UDP_DATAGRAM)",
+				opts.tx_packet_size, MAX_UDP_DATAGRAM);
+		exit(EXIT_FAILOPT);
+	}
+
 	packet = xzalloc(opts.tx_packet_size);
 
 	/* subtracting header overhead */

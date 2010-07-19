@@ -132,11 +132,11 @@ static void process_cli_request_udp(int server_fd)
 	struct sockaddr_storage sa;
 	socklen_t sa_len = sizeof(sa);
 	char hbuf[NI_MAXHOST], sbuf[NI_MAXSERV];
-	char packet[4096];
+	char packet[MAX_UDP_DATAGRAM];
 
 	sret = recvfrom(server_fd, &packet, sizeof(packet), flags,
 			(struct sockaddr *)&sa, &sa_len);
-	if (sret <= 0) {
+	if (sret < 0) {
 		err_sys("failure in recvfrom() - return code %d", sret);
 		return;
 	}

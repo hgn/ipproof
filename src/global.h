@@ -106,10 +106,13 @@ struct packet {
 __attribute__((__packed__));
 #endif
 
-#define MAGIC_COOKIE 0x2323
+#define MAGIC_COOKIE 0x23
 
 #define PAYLOAD_BYTE_PATTERN 0xff
 
+/* large enough to support 16128 jumbo ethernet frames - supported by intel
+ * e1000 adapters */
+#define	MAX_UDP_DATAGRAM 16384
 
 #define DEFAULT_PORT "5001"
 
