@@ -275,6 +275,7 @@ static void print_usage(const char *me)
 {
 	fprintf(stdout, "%s <options>\n"
 			"\t\t--port, -p <port>\n"
+			"\t\t--protocol, -t <tcp | udp> \n"
 			"\t\t--verbose, -v\n", me);
 }
 

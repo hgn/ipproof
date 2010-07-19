@@ -20,14 +20,14 @@
 #include "global.h"
 
 #define DEFAULT_PACKET_SIZE 1000
-#define DEFAULT_PACKET_INTERVAL 1000  /* eq 1 second */
+#define DEFAULT_PACKET_INTERVAL 1000000  /* eq 1 second */
 
 struct opts {
 	char *hostname;
 	char *port;
 	unsigned tx_packet_size;
 	unsigned rx_packet_size;
-	unsigned long packet_interval;
+	unsigned long packet_interval; /* in usec */
 	unsigned verbose_level;
 	unsigned iterations;
 	uint32_t server_delay;
@@ -116,7 +116,7 @@ static void print_usage(const char *me)
 			"   --interval (-i)\t\t\tinterval between the generation (and reception) of packets\n"
 			"   --iterations (-n) <number>\t\tlimit the number of transmissions\n"
 			"   --txpacketsize (-s) <number>\t\tsize of the generated packet (excluding TCP/IP header)\n"
-			"   --rxpacketsize (-t) <number>\t\tsize of the received packet (excluding TCP/IP header)\n"
+			"   --rxpacketsize (-r) <number>\t\tsize of the received packet (excluding TCP/IP header)\n"
 			"   --serverdelay (-d) <number>\t\tnumber of seconds until the server echo the data back\n"
 			"   --check (-c)\t\t\tcheck payload for bit errors\n"
 			"   --verbose (-v)\t\t\tverbose output to STDOUT\n", me);
@@ -314,8 +314,8 @@ int main(int ac, char *av[])
 		}
 
 		if (opts.packet_interval > 0) {
-			msg("   going to sleep for %u ms", opts.packet_interval);
-			msleep(opts.packet_interval);
+			msg("   going to sleep for %u us", opts.packet_interval);
+			xusleep(opts.packet_interval);
 		}
 	}
 

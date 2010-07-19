@@ -259,7 +259,7 @@ static double xgettimeofday(void)
 
 	struct timeval tv;
 	gettimeofday(&tv, NULL);
-	return (double)tv.tv_sec + (double)tv.tv_usec * 1000000;
+	return (double)tv.tv_sec + (double)tv.tv_usec / 1000000;
 
 #endif
 }
@@ -478,6 +478,7 @@ static int xgetopt_long(int ac, char * const av[],
 
 }
 
+
 static void msleep(unsigned long msec)
 {
 #if defined(WIN32)
@@ -502,6 +503,28 @@ static void msleep(unsigned long msec)
 	return;
 #endif
 }
+
+
+static void xusleep(unsigned long usec)
+{
+#if defined(WIN32)
+	struct timeval tv;
+	fd_set dummy;
+
+	SOCKET s = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
+
+	FD_ZERO(&dummy);
+	FD_SET(s, &dummy);
+
+	tv.tv_sec = usec / 1000000L;
+	tv.tv_usec = usec % 1000000L;
+
+	return select(0, 0, 0, &dummy, &tv);
+#else
+	usleep(usec);
+#endif
+}
+
 
 
 
