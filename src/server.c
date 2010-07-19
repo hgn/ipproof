@@ -132,12 +132,12 @@ static void process_cli_request_udp(int server_fd)
 	struct sockaddr_storage sa;
 	socklen_t sa_len = sizeof(sa);
 	char hbuf[NI_MAXHOST], sbuf[NI_MAXSERV];
-	struct packet packet;
+	char packet[4096];
 
 	sret = recvfrom(server_fd, &packet, sizeof(packet), flags,
 			(struct sockaddr *)&sa, &sa_len);
-	if (sret < 0) {
-		err_sys("failure in recvfrom()");
+	if (sret <= 0) {
+		err_sys("failure in recvfrom() - return code %d", sret);
 		return;
 	}
 
@@ -147,8 +147,6 @@ static void process_cli_request_udp(int server_fd)
 		err_msg_die(EXIT_FAILNET, "getnameinfo error: %s",  gai_strerror(ret));
 
 	msg("received %d bytes from %s:%s", sret, hbuf, sbuf);
-
-	msleep(1000);
 
 	//sendto(sd,msg,n,flags,(struct sockaddr *)&cliAddr,cliLen);
 }

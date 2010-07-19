@@ -208,7 +208,7 @@ static int xwrite(int fd, const char *buf, int len)
 #endif
 }
 
-static inline ssize_t xread(int fd, void *buf, int len)
+static ssize_t xread(int fd, void *buf, int len)
 {
 	return recv(fd, buf, len, 0);
 }
@@ -519,7 +519,7 @@ static void xusleep(unsigned long usec)
 	tv.tv_sec = usec / 1000000L;
 	tv.tv_usec = usec % 1000000L;
 
-	return select(0, 0, 0, &dummy, &tv);
+	select(0, 0, 0, &dummy, &tv);
 #else
 	usleep(usec);
 #endif
