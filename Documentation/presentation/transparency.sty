@@ -1,0 +1,338 @@
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{transparency}
+[2006/10/25 v1.0]
+
+\RequirePackage[obeyspaces]{url}
+\RequirePackage{graphicx}
+\RequirePackage{color}
+\RequirePackage{fancyvrb}
+\RequirePackage{fancyhdr}
+\RequirePackage{ifthen}
+\RequirePackage{amssymb}
+\RequirePackage{amsfonts}
+\RequirePackage[T1]{fontenc}
+\RequirePackage{ae}
+\RequirePackage{eso-pic}
+\RequirePackage{tabularx}
+\RequirePackage[hypertexnames=false]{hyperref}
+\RequirePackage{lastpage}
+\RequirePackage{times}
+
+% Some handy commands
+\newcommand{\bi}{\begin{itemize}}
+\newcommand{\ei}{\end{itemize}}
+\newcommand{\be}{\begin{enumerate}}
+\newcommand{\ee}{\end{enumerate}}
+\newcommand{\bd}{\begin{description}}
+\newcommand{\ed}{\end{description}}
+\newcommand{\bv}{\begin{verbatim}}
+\newcommand{\ev}{\end{verbatim}}
+    
+
+% Colors
+% ftp.nara.wide.ad.jp/pub/TeX/CTAN/info/colour/rgb/rgb.pdf 
+% 0.2,0.2,0.6
+\definecolor{titlecolor}{rgb}{0.30,0.40,0.55}
+\definecolor{chaptercolor}{rgb}{0.30,0.40,0.55}
+\definecolor{slidetitlecolor}{rgb}{0.30,0.40,0.55}
+\definecolor{bulletcolor}{rgb}{0.30,0.40,0.55}
+\definecolor{linkcolor}{rgb}{0.30,0.40,0.55}
+\definecolor{codecolor}{rgb}{0.30,0.40,0.55}
+\definecolor{urlcolor}{rgb}{0.2,0.2,0.6}
+
+% Font sizes
+\renewcommand\tiny{\fontsize{12}{20}\selectfont}
+\renewcommand\scriptsize{\fontsize{14}{20}\selectfont}
+\renewcommand\footnotesize{\fontsize{16}{20}\selectfont}
+\renewcommand\small{\fontsize{18}{25}\selectfont}
+\renewcommand\normalsize{\fontsize{20}{30}\selectfont}
+\renewcommand\large{\fontsize{26}{30}\selectfont}
+\renewcommand\Large{\fontsize{28}{30}\selectfont}
+\renewcommand\LARGE{\fontsize{30}{30}\selectfont}
+\renewcommand\huge{\fontsize{32}{30}\selectfont}
+\renewcommand\Huge{\fontsize{38}{30}\selectfont}
+
+% Font families
+%\renewcommand{\familydefault}{phv}
+%\renewcommand{\rmdefault}{phv}
+\renewcommand{\sldefault}{sl}
+\renewcommand{\itdefault}{it}
+\renewcommand{\updefault}{n}
+
+
+\hypersetup{
+  colorlinks=true,
+  pdfmenubar=true,
+  pdftoolbar=false,
+  pdffitwindow=true,
+  linkcolor=black, 
+  anchorcolor=black,
+  citecolor=black,
+  filecolor=black,
+  menucolor=black,
+  pagecolor=black,
+  urlcolor=urlcolor
+}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% OK - Stop editing here (unless you know what are
+% you doing
+
+% Page Layout
+\newdimen\marginleft
+\newdimen\marginright
+\newdimen\margintop
+\newdimen\marginbottom
+\setlength\marginleft{0pt}
+\setlength\marginright{0pt}
+\setlength\margintop{0pt}
+\setlength\marginbottom{0pt}
+\setlength\headheight{0pt}
+\setlength\headsep{0pt}
+\setlength\footskip{15pt}
+\hoffset=0pt
+\voffset=0pt
+
+\def\InitLayout{
+  \setlength{\textwidth}{\paperwidth}
+  \addtolength{\textwidth}{-\marginleft}
+  \addtolength{\textwidth}{-\marginright}
+
+  \setlength{\textheight}{\paperheight}
+  \addtolength{\textheight}{-0.7in}
+  \addtolength{\textheight}{-\marginbottom}
+  \addtolength{\textheight}{-\headheight}
+  \addtolength{\textheight}{-\headsep}
+  \addtolength{\textheight}{-\footskip}
+  \setlength{\oddsidemargin}{\marginleft}
+  \addtolength{\oddsidemargin}{-1in}
+  \setlength{\evensidemargin}{\marginleft}
+  \addtolength{\evensidemargin}{-1in}
+  \setlength{\topmargin}{\margintop}
+  \addtolength{\topmargin}{-0.5in}
+}
+
+\def\margins#1#2#3#4{
+  \marginleft=#1
+  \marginright=#2
+  \margintop=#3
+  \marginbottom=#4
+  \InitLayout
+}
+
+\margins{.5in}{.5in}{.5in}{.5in}
+
+\def\screensize#1#2{
+    \paperheight=#1
+    \paperwidth=#2
+    \InitLayout
+    \setfooter
+}
+
+% Spaces
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{1ex}
+\renewcommand{\arraystretch}{1.2}
+
+% Customize lists to control spacing easily
+\def\enumhook{}
+\def\itemhook{}
+\def\descripthook{}
+\def\enumerate{
+  \ifnum \@enumdepth >\thr@@\@toodeep\else
+    \advance\@enumdepth\@ne
+    \edef\@enumctr{enum\romannumeral\the\@enumdepth}
+      \expandafter
+      \list
+        \csname label\@enumctr\endcsname
+        {\usecounter\@enumctr\def\makelabel##1{\hss\llap{##1}}
+          \enumhook}
+  \fi}
+\def\itemize{
+  \ifnum \@itemdepth >\thr@@\@toodeep\else
+    \advance\@itemdepth\@ne
+    \edef\@itemitem{labelitem\romannumeral\the\@itemdepth}
+    \expandafter
+    \list
+      \csname\@itemitem\endcsname
+      {\def\makelabel##1{\hss\llap{##1}}
+        \itemhook}
+  \fi}
+\renewenvironment{description}
+  {\list{}{\labelwidth\z@ \itemindent-\leftmargin
+           \let\makelabel\descriptionlabel\descripthook}}
+  {\endlist}
+
+\renewcommand{\itemhook}{
+  \renewcommand{\labelitemi}{%
+    \color{bulletcolor}%
+    \raisebox{.2ex}{$\blacktriangleright$}%
+  }
+  \renewcommand{\labelitemii}{\color{bulletcolor}$\bullet$}
+  \renewcommand{\labelitemiii}{\color{bulletcolor}$\bullet$}
+  \renewcommand{\labelitemiv}{\color{bulletcolor}$\star$}
+  \renewcommand\labelenumi{\color{bulletcolor}\theenumi.}
+  \renewcommand\labelenumii{\color{bulletcolor}\theenumii)}
+  \renewcommand\labelenumiii{\color{bulletcolor}\theenumiii.}
+  \renewcommand\labelenumiv{\color{bulletcolor}\theenumiv.}
+  \setlength{\leftmargin}{3ex}
+  \setlength{\itemsep}{.5ex}
+  \setlength{\topsep}{0pt}
+  \setlength{\partopsep}{0pt}
+  \setlength{\parsep}{0.5ex}
+}
+
+\renewcommand{\enumhook}{
+  \itemhook
+}
+
+\renewcommand{\descripthook}{
+  \itemhook
+}
+
+\let\ifFrenchItemizeSpacing=\iffalse
+
+\newcommand{\name}[1]{
+  \def\@name{#1}
+}
+
+\newcommand{\footerline}[1]{
+  \def\@footerline{#1}
+}
+
+\newcommand{\email}[1]{
+  \def\@email{#1}
+}
+\email{}
+
+\newcommand{\company}[1]{
+  \def\@company{#1}
+}
+\company{}
+
+\newcommand{\subtitle}[1]{
+  \def\@subtitle{#1}
+}
+\subtitle{}
+
+\newcommand{\logo}{}
+\newcommand{\overlay}{}
+
+\newcommand{\setbackground}[2][extend]{
+ 
+ \ifthenelse{\equal{#1}{extend}}
+    {\renewcommand{\overlay}{
+      \put(0,0){\makebox(0,0)[lb]{\includegraphics[width=\paperwidth,height=\paperheight]{#2}}}}}
+    {\renewcommand{\overlay}{
+      \put(\LenToUnit{.5\paperwidth},\LenToUnit{.5\paperheight}){\makebox(0,0){\includegraphics{#2}}}}}
+}
+
+\newcommand{\setlogo}[1]{
+  \gdef\logoimg{#1}
+  \renewcommand{\logo}{
+    \put(20,20){\makebox(0,0)[lb]{\logoimg}}
+  }
+}
+
+\newcommand{\logoon}{
+  \ClearShipoutPicture
+  \AddToShipoutPicture{\overlay}
+  \AddToShipoutPicture{\logo}
+}
+
+\newcommand{\logooff}{
+  \ClearShipoutPicture
+  \AddToShipoutPicture{\overlay}
+}
+
+% Verbatim environment
+\renewcommand{\FancyVerbFormatLine}[1]{%
+  \footnotesize
+  \color{codecolor}
+  \FV@ObeyTabs{#1}%
+}
+\DefineVerbatimEnvironment{verbatim}{Verbatim}{}
+
+\newcommand\code{\begingroup\Url}
+
+% Footer
+\def\setfooter{
+  \pagestyle{fancy}
+  \fancyhead{}
+  \fancyfoot{} % clear all footer fields
+  \fancyfoot[L]{
+    \bfseries
+    \ifthenelse{\isundefined{\@footerline}}{}{\@footerline}
+  }
+  \fancyfoot[R]{
+    \bfseries
+    \ifthenelse{\isundefined{\@chaptertitle}}{}{\@chaptertitle\ -}\ \thepage{} $|$ \pageref{LastPage}
+  }
+  \renewcommand{\headrulewidth}{0pt}
+  \renewcommand{\footrulewidth}{0pt}
+}
+
+% New commands
+\newenvironment{slide}{\newpage\logoon}{}
+
+\newcommand{\slidetitle}[2]{
+  \pdfbookmark[1]{#1}{\thechapter-\thepage}
+  {\LARGE\color{slidetitlecolor}\bf{#2}}
+  \vspace{1ex}
+}
+
+\newcommand{\setmark}[1]{
+	\hypertarget{#1}{}
+}
+
+\newcommand{\refmark}[2]{
+	\hyperlink{#2}{\color{bulletcolor}{{\tiny{[$\triangleright$#2]}}}}
+}
+
+% title, subtitle, author, year, link
+\newcommand{\bibarticle}[5]{
+	\htmladdnormallink{\scriptsize{\textbf{#1}}, \footnotesize{\textit{#2}}, \scriptsize{\textsc{#3}, #4}}{#5}
+}
+% title, url, link
+\newcommand{\bibweblink}[3]{
+	\htmladdnormallink{\scriptsize{\textbf{#1}}, \footnotesize{\textit{#2}}}{#3}
+}
+
+\newcounter{chapter}
+\newcommand{\chapter}[2]{
+  \gdef\@chaptertitle{#2}
+  {\logoon\newpage
+	%\setcounter{page}{1}
+  \refstepcounter{chapter}
+  \pdfbookmark[0]{#1}{\thechapter-\thepage}
+  \ \vfill
+  \Huge
+  \chaptername\ \thechapter\\
+  \color{chaptercolor}\bf{#2}}
+  \vfill
+}
+
+\renewcommand{\maketitle}{
+  \logooff
+  \thispagestyle{empty}
+  \begin{center}
+  \vspace*{7ex}
+  {\Large\color{titlecolor}\bf\@title\par}
+  \vspace{1ex}
+  {\normalsize\it\@subtitle\par}
+  \vspace{8ex}
+  \normalsize  \@name\\
+  {\footnotesize\htmladdnormallink{\@email}{mailto:\@email}\par}
+  \vspace{1ex}
+  \scriptsize \@company\par
+  \vfill
+  \vfill
+  {\small\@date}
+  \end{center}
+}
+
+\raggedright
+
+
+% vim600: fdm=marker tw=120 sw=4 ts=4 sts=4 ff=unix noet:
