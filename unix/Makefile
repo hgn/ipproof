@@ -27,11 +27,11 @@ clean:
 %: %.c Makefile global.h
 	$(CC) $(CFLAGS) $(CWARNINGS) -o $@ $<
 
-client: ../src/client.c
-	$(CC) $(CFLAGS) $(CWARNINGS) -o client ../src/client.c
+client: ../src/client.c ../src/shared.c
+	$(CC) $(CFLAGS) $(CWARNINGS) -o client ../src/client.c ../src/shared.c
 
-server: ../src/server.c
-	$(CC) $(CFLAGS) $(CWARNINGS) -o server ../src/server.c
+server: ../src/server.c ../src/shared.c
+	$(CC) $(CFLAGS) $(CWARNINGS) -o server ../src/server.c ../src/shared.c
 
 cscope:
 	cscope -R -b

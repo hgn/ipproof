@@ -22,6 +22,8 @@
 #define DEFAULT_PACKET_SIZE 1000
 #define DEFAULT_PACKET_INTERVAL 1000000  /* eq 1 second */
 
+extern struct socket_options socket_options[];
+
 struct opts {
 	char *hostname;
 	char *port;

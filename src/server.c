@@ -22,6 +22,8 @@
 #define DEFAULT_PACKET_SIZE 1000
 #define DEFAULT_PACKET_INTERVAL 1
 
+extern struct socket_options socket_options[];
+
 struct conn_data {
 	uint16_t sequence_no;
 	int sequence_initialized;

@@ -202,28 +202,26 @@ static const int debug_enabled = 0;
 	} while (0)
 #endif
 
-static int xwrite(int fd, const char *buf, int len)
-{
-#if defined(WIN32)
-	return send(fd, buf, len, 0);
-#else
-	return write(fd, buf, len);
-#endif
-}
+/* shared.c */
+void msg(const char *, ...);
+void x_err_ret(const char *, int, const char *, ...);
+void x_err_sys(const char *, int, const char *, ...);
+void xsetsockopt(int, int, int, const void *, socklen_t, const char *);
+void xusleep(unsigned long);
+void msleep(unsigned long);
+int xwrite(int fd, const char *buf, int len);
+int xclose(int fd);
+ssize_t xread(int fd, void *buf, int len);
+void *xmalloc(size_t);
+void *xzalloc(size_t);
+void xgetaddrinfo(const char *node, const char *service, struct addrinfo *hints, struct addrinfo **res);
+double xgettimeofday(void);
+ssize_t write_len(int fd, const void *buf, size_t len);
+ssize_t read_len(int fd, const void *buf, size_t len);
+void init_network_stack(void);
+void fini_network_stack(void);
+int xgetopt_long(int ac, char * const av[], const char *optstring, const struct option *longopts, int *longindex);
 
-static ssize_t xread(int fd, void *buf, int len)
-{
-	return recv(fd, buf, len, 0);
-}
-
-static int xclose(int fd)
-{
-#if defined(WIN32)
-	return closesocket(fd);
-#else
-	return close(fd);
-#endif
-}
 
 
 /* determine the size of an array */
@@ -249,290 +247,32 @@ static int xclose(int fd)
 
 #define	MAXERRMSG 1024
 
-static double xgettimeofday(void)
-{
 
-#if defined(WIN32)
 
-	struct _timeb tv;
-	_ftime(&tv);
-	return (double)tv.time + (double)tv.millitm * 1000;
 
-#else
-
-	struct timeval tv;
-	gettimeofday(&tv, NULL);
-	return (double)tv.tv_sec + (double)tv.tv_usec / 1000000;
-
-#endif
-}
-
-
-void msg(const char *format, ...)
-{
-	va_list ap;
-
-	fprintf(stderr, "[%06lf] ", xgettimeofday());
-
-	va_start(ap, format);
-	vfprintf(stderr, format, ap);
-	va_end(ap);
-
-	fputs("\n", stderr);
-}
-
-
-static void err_doit(int sys_error, const char *file,
-		const int line_no, const char *fmt, va_list ap)
-{
-	int errno_save;
-	char buf[MAXERRMSG];
-
-	errno_save = errno;
-
-	vsnprintf(buf, sizeof(buf) - 1, fmt, ap);
-	if (sys_error) {
-		size_t len = strlen(buf);
-		snprintf(buf + len,  sizeof buf - len, " (%s)",
-				strerror(errno_save));
-	}
-
-	fprintf(stderr, "ERROR [%s:%d]: %s\n", file, line_no, buf);
-	fflush(NULL);
-
-	errno = errno_save;
-}
-
-
-void x_err_ret(const char *file, int line_no, const char *fmt, ...)
-{
-	va_list ap;
-
-	va_start(ap, fmt);
-	err_doit(0, file, line_no, fmt, ap);
-	va_end(ap);
-	return;
-}
-
-
-void x_err_sys(const char *file, int line_no, const char *fmt, ...)
-{
-	va_list ap;
-
-	va_start(ap, fmt);
-	err_doit(1, file, line_no, fmt, ap);
-	va_end(ap);
-}
-
-
-static void *xmalloc(size_t size)
-{
-	void *ptr = malloc(size);
-	if (!ptr)
-		err_sys_die(EXIT_FAILMEM, "failure in malloc!\n");
-	return ptr;
-}
-
-
-static void *xzalloc(size_t size)
-{
-	void *ptr = xmalloc(size);
-	memset(ptr, 0, size);
-	return ptr;
-}
-
-
-static void xsetsockopt(int s, int level, int optname,
-		const void *optval, socklen_t optlen, const char *str)
-{
-	int ret = setsockopt(s, level, optname, optval, optlen);
-	if (ret)
-		err_sys_die(EXIT_FAILNET, "Can't set socketoption %s", str);
-}
-
-
-static void xgetaddrinfo(const char *node, const char *service,
-		struct addrinfo *hints, struct addrinfo **res)
-{
-	int ret;
-
-	ret = getaddrinfo(node, service, hints, res);
-	if (ret != 0) {
-#if defined(WIN32)
-		err_msg_die(EXIT_FAILNET, "Call to getaddrinfo() failed: %s!",
-				strerror(ret));
-#else
-		err_msg_die(EXIT_FAILNET, "Call to getaddrinfo() failed: %s!",
-				(ret == EAI_SYSTEM) ?  strerror(errno) : gai_strerror(ret));
-#endif
-	}
-
-	return;
-}
-
-
-static ssize_t write_len(int fd, const void *buf, size_t len)
-{
-	const char *bufptr = buf;
-	ssize_t total = 0;
-
-	if (len == 0)
-		return SUCCESS;
-
-	do {
-		ssize_t written = xwrite(fd, bufptr, len);
-		if (written < 0) {
-			int real_errno;
-
-			if (errno == EINTR || errno == EAGAIN)
-				continue;
-
-			real_errno = errno;
-			err_msg("Could not write %u bytes: %s", len, strerror(errno));
-			errno = real_errno;
-			break;
-		}
-		total  += written;
-		bufptr += written;
-		len    -= written;
-	} while (len > 0);
-
-	return total > 0 ? SUCCESS : FAILURE;
-}
-
-
-static ssize_t read_len(int fd, const void *buf, size_t len)
-{
-	const char *bufptr = buf;
-	size_t read_actual = 0;
-
-	if (len == 0)
-		return SUCCESS;
-
-	while (1) {
-
-		ssize_t cur = xread(fd, (void *)bufptr, len - read_actual);
-
-		if (cur < 0) {
-			int real_errno;
-
-			if (errno == EINTR || errno == EAGAIN)
-				continue;
-
-			real_errno = errno;
-			err_msg("Could not read %u bytes: %s", len, strerror(errno));
-			errno = real_errno;
-			break;
-		}
-
-		if (cur == 0) {
-			msg("read return 0");
-			return 0;
-		}
-
-		bufptr += cur; read_actual += cur;
-
-		if (read_actual >= len)
-			break;
-	}
-
-	return read_actual;
-}
-
-
-static void init_network_stack(void)
-{
-#if defined(WIN32)
-	int err;
-	WSADATA wsaData;
-
-	err = WSAStartup(MAKEWORD(2, 2), &wsaData);
-	if (err != 0) {
-		/* Tell the user that we could not find a usable */
-		/* Winsock DLL.                                  */
-		err_msg_die(EXIT_FAILMISC, "WSAStartup failed with error: %d\n", err);
-	}
-#else
-	/* SIGPIPE signal will be received if the peer has gone away
-	 * and an attempt is made to write data to the peer. Ignoring this
-	 * signal causes the write operation to receive an EPIPE error */
-	signal(SIGPIPE, SIG_IGN);
-#endif
-}
-
-static void fini_network_stack(void)
-{
-#if defined(WIN32)
-	WSACleanup();
-#else
-#endif
-}
-
-static int xgetopt_long(int ac, char * const av[],
-		const char *optstring,
-		const struct option *longopts, int *longindex)
-{
-#if defined(WIN32)
-		return _getopt_internal(ac, av, optstring,
-				longopts, longindex, 0);
-#else
-		return getopt_long(ac, av, optstring, longopts, longindex);
-#endif
-
-}
-
-
-static void msleep(unsigned long msec)
-{
-#if defined(WIN32)
-	Sleep(msec);
-#else
-	struct timespec req;
-	time_t sec;
-
-	if (msec == 0)
-		return;
-
-	memset(&req, 0, sizeof(struct timespec));
-
-	sec = msec / 1000;
-
-	msec = msec - ( sec * 1000);
-	req.tv_sec = sec;
-	req.tv_nsec = msec * 1000000L;
-
-	while (nanosleep(&req, &req) == -1)
-		continue;
-	return;
-#endif
-}
-
-
-static void xusleep(unsigned long usec)
-{
-#if defined(WIN32)
-	struct timeval tv;
-	fd_set dummy;
-
-	SOCKET s = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
-
-	FD_ZERO(&dummy);
-	FD_SET(s, &dummy);
-
-	tv.tv_sec = usec / 1000000L;
-	tv.tv_usec = usec % 1000000L;
-
-	select(0, 0, 0, &dummy, &tv);
-#else
-	usleep(usec);
-#endif
-}
-
-
-
+enum sockopt_val_types {
+	SVT_BOOL = 0,
+	SVT_INT,
+	SVT_TOINT,
+	SVT_TIMEVAL,
+	SVT_STR
+};
+
+struct socket_options {
+	const char *sockopt_name;
+	int   level;
+	int   option;
+	int   sockopt_type;
+	int (*convert_to_int)(const char *);
+	int  user_issue;
+	union {
+		int value;
+		struct timeval tv;
+		const char *value_ptr;
+	};
+};
 
 #endif /* GLOBAL_H */
-
 
 
 /* vim: set tw=78 ts=4 sw=4 sts=4 ff=unix noet: */
