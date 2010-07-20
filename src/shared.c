@@ -66,6 +66,7 @@ struct socket_options socket_options[] = {
 };
 
 
+
 void xsetsockopt(int s, int level, int optname,
 		const void *optval, socklen_t optlen, const char *str)
 {
@@ -73,7 +74,6 @@ void xsetsockopt(int s, int level, int optname,
 	if (ret)
 		err_sys_die(EXIT_FAILNET, "Can't set socketoption %s", str);
 }
-
 
 
 static void ignore_sigpipe(void)
@@ -386,20 +386,20 @@ void die_print_setsockopts(void)
 }
 
 
-void parse_setsockopt_name(const char *optname, const char *optval)
+void parse_setsockopt_name(const char *optname, const char *optval, struct socket_options *so)
 {
 	unsigned i;
 
-	for (i = 0; socket_options[i].sockopt_name; i++) {
-		if (strcasecmp(optname, socket_options[i].sockopt_name))
+	for (i = 0; so[i].sockopt_name; i++) {
+		if (strcasecmp(optname, so[i].sockopt_name))
 			continue;
 
-		switch (socket_options[i].sockopt_type) {
+		switch (so[i].sockopt_type) {
 		case SVT_BOOL:
-			socket_options[i].value = parse_yesno(optname, optval);
+			so[i].value = parse_yesno(optname, optval);
 			goto found;
 		case SVT_INT:
-			if (!scan_int(optval, &socket_options[i].value))
+			if (!scan_int(optval, &so[i].value))
 				err_msg("%s: unrecognized optval \"%s\" "
 					"(integer argument required);skipped",
 							optval, optname);
@@ -423,17 +423,17 @@ void parse_setsockopt_name(const char *optname, const char *optval)
 					return;
 				}
 			}
-			socket_options[i].tv.tv_sec = seconds;
-			socket_options[i].tv.tv_usec = usecs;
+			so[i].tv.tv_sec = seconds;
+			so[i].tv.tv_usec = usecs;
 			goto found;
 		}
 		case SVT_STR:
-			socket_options[i].value_ptr = optval;
+			so[i].value_ptr = optval;
 			goto found;
 		case SVT_TOINT:
-			assert(socket_options[i].convert_to_int);
-			socket_options[i].value =
-				socket_options[i].convert_to_int(optval);
+			assert(so[i].convert_to_int);
+			so[i].value =
+				so[i].convert_to_int(optval);
 			goto found;
 		default:
 			err_msg("WARNING: Internal error: unrecognized "
@@ -444,7 +444,7 @@ void parse_setsockopt_name(const char *optname, const char *optval)
 	}
 	err_msg("Unrecognized sockopt \"%s\" ignored", optname );
  found:
-	socket_options[i].user_issue = 1;
+	so[i].user_issue = 1;
 }
 
 
@@ -490,14 +490,18 @@ void set_socketopts(int fd, int protocol)
 		case SVT_TOINT:
 			optlen = sizeof(socket_options[i].value);
 			optval = &socket_options[i].value;
+			msg("   set socket option %s:%d", socket_options[i].sockopt_name, socket_options[i].value);
 		break;
 		case SVT_TIMEVAL:
 			optlen = sizeof(socket_options[i].tv);
 			optval = &socket_options[i].tv;
+			/* TODO: print struct timeval */
+			msg("   set socket option %s", socket_options[i].sockopt_name);
 		break;
 		case SVT_STR:
 			optlen = strlen(socket_options[i].value_ptr) + 1;
 			optval = socket_options[i].value_ptr;
+			msg("   set socket option %s:%s", socket_options[i].sockopt_name, socket_options[i].value_ptr);
 		break;
 		default:
 			err_msg_die(EXIT_FAILNET, "Unknown sockopt_type %d\n",
@@ -505,8 +509,8 @@ void set_socketopts(int fd, int protocol)
 		}
 		ret = setsockopt(fd, socket_options[i].level, socket_options[i].option, optval, optlen);
 		if (ret)
-			err_sys("setsockopt option %d (name %s) failed", socket_options[i].sockopt_type,
-										socket_options[i].sockopt_name);
+			err_sys_die(EXIT_FAILOPT, "setsockopt option %d (name %s) failed",
+					socket_options[i].sockopt_type, socket_options[i].sockopt_name);
 	}
 }
 
@@ -646,5 +650,39 @@ void xusleep(unsigned long usec)
 	usleep(usec);
 #endif
 }
+
+
+int optarg_set_socketopts(const char *option_arg, struct socket_options *so)
+{
+	int ret = FAILURE;
+	const char delimiter[] = ":";
+	char *token, *cp;
+	char *s1;
+
+	cp = strdup(option_arg);
+	token = strtok(cp, delimiter); /* first word */
+	if (!token)
+		goto out;
+
+	s1 = strdup(token);
+
+	token = strtok(NULL, delimiter);
+	if (!token)
+		goto out1;
+
+	/* great, argument are meet our requirements */
+	parse_setsockopt_name(s1, token, so);
+
+
+	ret = SUCCESS;
+
+out1:
+	free(s1);
+out:
+	free(cp);
+
+	return ret;
+}
+
 
 /* vim: set tw=78 ts=4 sw=4 sts=4 ff=unix noet: */

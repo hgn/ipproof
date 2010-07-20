@@ -86,6 +86,17 @@ static int init_cli_socket(struct opts *opts)
 			pr_debug("socket created - protocol %s(%d)",
 					protoent->p_name, protoent->p_proto);
 
+		/* set all previously set socket option */
+		set_socketopts(fd, opts->ai_protocol);
+
+		/* Connect to peer
+		 ** There are three advantages to call connect for all types
+		 ** of our socket protocols (especially udp)
+		 **
+		 ** 1. We don't need to specify a destination address (only call write)
+		 ** 2. Performance advantages (kernel level)
+		 ** 3. Error detection (e.g. destination port unreachable at udp)
+		 */
 		ret = connect(fd, addrtmp->ai_addr, addrtmp->ai_addrlen);
 		if (ret == -1)
 			err_sys_die(EXIT_FAILNET, "Can't connect to %s", opts->hostname);
@@ -121,13 +132,14 @@ static void print_usage(const char *me)
 			"   --rxpacketsize (-r) <number>\t\tsize of the received packet (excluding TCP/IP header)\n"
 			"   --serverdelay (-d) <number>\t\tnumber of seconds until the server echo the data back\n"
 			"   --check (-c)\t\t\tcheck payload for bit errors\n"
+			"   --setsockopt (-S) <option:arg1:arg2:...\t\tset the socketoption \"option\" with argument arg1, arg2, ...\n"
 			"   --verbose (-v)\t\t\tverbose output to STDOUT\n", me);
 }
 
 
 int main(int ac, char *av[])
 {
-	int socket_fd, c;
+	int socket_fd, c, ret;
 	size_t sret;
 	char *data_rx;
 	struct packet *packet;
@@ -165,9 +177,10 @@ int main(int ac, char *av[])
 			{"check",        1, 0, 'c'},
 			{"help",         1, 0, 'h'},
 			{"transport",    1, 0, 't'},
+			{"setsockopt",   1, 0, 'S'},
 			{0, 0, 0, 0}
 		};
-		c = xgetopt_long(ac, av, "t:i:s:t:e:p:n:d:r:vhc46",
+		c = xgetopt_long(ac, av, "t:i:s:t:e:p:n:d:r:S:vhc46",
 				long_options, &option_index);
 		if (c == -1)
 			break;
@@ -207,6 +220,14 @@ int main(int ac, char *av[])
 				break;
 			case 'c':
 				opts.check_payload = 1;
+				break;
+			case 'S':
+				ret = optarg_set_socketopts(optarg, socket_options);
+				if (ret != SUCCESS) {
+					err_msg("socket option %s not supported", optarg);
+					print_usage(av[0]);
+					exit(EXIT_FAILOPT);
+				}
 				break;
 			case 't':
 				if (!strcasecmp("tcp", optarg)) {
@@ -276,7 +297,6 @@ int main(int ac, char *av[])
 	socket_fd = init_cli_socket(&opts);
 
 	while (!opts.iteration_limit || opts.iterations--) {
-		int ret;
 
 		start = xgettimeofday();
 

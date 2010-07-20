@@ -202,6 +202,22 @@ static const int debug_enabled = 0;
 	} while (0)
 #endif
 
+
+struct socket_options {
+	const char *sockopt_name;
+	int   level;
+	int   option;
+	int   sockopt_type;
+	int (*convert_to_int)(const char *);
+	int  user_issue;
+	union {
+		int value;
+		struct timeval tv;
+		const char *value_ptr;
+	};
+};
+
+
 /* shared.c */
 void msg(const char *, ...);
 void x_err_ret(const char *, int, const char *, ...);
@@ -221,6 +237,8 @@ ssize_t read_len(int fd, const void *buf, size_t len);
 void init_network_stack(void);
 void fini_network_stack(void);
 int xgetopt_long(int ac, char * const av[], const char *optstring, const struct option *longopts, int *longindex);
+int optarg_set_socketopts(const char *, struct socket_options *);
+void set_socketopts(int, int);
 
 
 
@@ -256,20 +274,6 @@ enum sockopt_val_types {
 	SVT_TOINT,
 	SVT_TIMEVAL,
 	SVT_STR
-};
-
-struct socket_options {
-	const char *sockopt_name;
-	int   level;
-	int   option;
-	int   sockopt_type;
-	int (*convert_to_int)(const char *);
-	int  user_issue;
-	union {
-		int value;
-		struct timeval tv;
-		const char *value_ptr;
-	};
 };
 
 #endif /* GLOBAL_H */
