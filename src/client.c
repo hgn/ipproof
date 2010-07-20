@@ -132,7 +132,7 @@ static void print_usage(const char *me)
 			"   --rxpacketsize (-r) <number>\t\tsize of the received packet (excluding TCP/IP header)\n"
 			"   --serverdelay (-d) <number>\t\tnumber of seconds until the server echo the data back\n"
 			"   --check (-c)\t\t\tcheck payload for bit errors\n"
-			"   --setsockopt (-S) <option:arg1:arg2:...\t\tset the socketoption \"option\" with argument arg1, arg2, ...\n"
+			"   --setsockopt (-S) <option:arg1:arg2:...>\tset the socketoption \"option\" with argument arg1, arg2, ...\n"
 			"   --verbose (-v)\t\t\tverbose output to STDOUT\n", me);
 }
 
@@ -175,7 +175,7 @@ int main(int ac, char *av[])
 			{"serverdelay",  1, 0, 'd'},
 			{"port",         1, 0, 'p'},
 			{"check",        1, 0, 'c'},
-			{"help",         1, 0, 'h'},
+			{"help",         0, 0, 'h'},
 			{"transport",    1, 0, 't'},
 			{"setsockopt",   1, 0, 'S'},
 			{0, 0, 0, 0}
