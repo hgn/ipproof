@@ -70,7 +70,11 @@ struct socket_options socket_options[] = {
 void xsetsockopt(int s, int level, int optname,
 		const void *optval, socklen_t optlen, const char *str)
 {
-	int ret = setsockopt(s, level, optname, optval, optlen);
+	int ret;
+
+	msg("set socket option %s", str);
+
+	ret = setsockopt(s, level, optname, optval, optlen);
 	if (ret)
 		err_sys_die(EXIT_FAILNET, "Can't set socketoption %s", str);
 }
@@ -490,18 +494,18 @@ void set_socketopts(int fd, int protocol)
 		case SVT_TOINT:
 			optlen = sizeof(socket_options[i].value);
 			optval = &socket_options[i].value;
-			msg("   set socket option %s:%d", socket_options[i].sockopt_name, socket_options[i].value);
+			msg("set socket option %s:%d", socket_options[i].sockopt_name, socket_options[i].value);
 		break;
 		case SVT_TIMEVAL:
 			optlen = sizeof(socket_options[i].tv);
 			optval = &socket_options[i].tv;
 			/* TODO: print struct timeval */
-			msg("   set socket option %s", socket_options[i].sockopt_name);
+			msg("set socket option %s", socket_options[i].sockopt_name);
 		break;
 		case SVT_STR:
 			optlen = strlen(socket_options[i].value_ptr) + 1;
 			optval = socket_options[i].value_ptr;
-			msg("   set socket option %s:%s", socket_options[i].sockopt_name, socket_options[i].value_ptr);
+			msg("set socket option %s:%s", socket_options[i].sockopt_name, socket_options[i].value_ptr);
 		break;
 		default:
 			err_msg_die(EXIT_FAILNET, "Unknown sockopt_type %d\n",

@@ -153,7 +153,7 @@ static void process_cli_request_udp(int server_fd)
 	//sendto(sd,msg,n,flags,(struct sockaddr *)&cliAddr,cliLen);
 }
 
-static void process_cli_request_tcp(int server_fd)
+static void process_cli_request_tcp(int server_fd, struct opts *opts)
 {
 	int connected_fd = -1, ret;
 	struct sockaddr_storage sa;
@@ -169,6 +169,9 @@ static void process_cli_request_tcp(int server_fd)
 		err_sys("accept error");
 		exit(EXIT_FAILNET);
 	}
+
+	/* set all previously set socket option */
+	set_socketopts(connected_fd, opts->ai_protocol);
 
 	ret = getnameinfo((struct sockaddr *)&sa, sa_len, hbuf,
 			NI_MAXHOST, sbuf, NI_MAXSERV, NI_NUMERICHOST | NI_NUMERICSERV);
@@ -231,8 +234,13 @@ static int init_srv_socket(const struct opts *opts)
 			pr_debug("socket created - protocol %s(%d)",
 					protoent->p_name, protoent->p_proto);
 
-		if (opts->ai_protocol == IPPROTO_TCP)
-			xsetsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on), "SO_REUSEADDR");
+
+		/* For multicast sockets it is maybe necessary to set
+		 * socketoption SO_REUSEADDR, cause multiple receiver on
+		 * the same host will bind to this local socket.
+		 * In all other cases: there is no penalty - hopefully! ;-)
+		 */
+		xsetsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on), "SO_REUSEADDR");
 
 		ret = bind(fd, addrtmp->ai_addr, addrtmp->ai_addrlen);
 		if (ret) {
@@ -274,15 +282,16 @@ static int init_srv_socket(const struct opts *opts)
 static void print_usage(const char *me)
 {
 	fprintf(stdout, "%s <options>\n"
-			"\t\t--port, -p <port>\n"
-			"\t\t--protocol, -t <tcp | udp> \n"
-			"\t\t--verbose, -v\n", me);
+			"  --port, -p <port>\n"
+			"  --protocol, -t <tcp | udp> \n"
+			"  --setsockopt (-S) <option:arg1:arg2:...>\tset the socketoption \"option\" with argument arg1, arg2, ...\n"
+			"  --verbose, -v\n", me);
 }
 
 
 int main(int ac, char *av[])
 {
-	int socket_fd, c;
+	int socket_fd, c, ret;
 	struct opts opts;
 
 	memset(&opts, 0, sizeof(opts));
@@ -308,9 +317,10 @@ int main(int ac, char *av[])
 			{"port",         1, 0, 'p'},
 			{"help",         1, 0, 'h'},
 			{"transport",    1, 0, 't'},
+			{"setsockopt",   1, 0, 'S'},
 			{0, 0, 0, 0}
 		};
-		c = xgetopt_long(ac, av, "p:t:vh46",
+		c = xgetopt_long(ac, av, "p:t:S:vh46",
 				long_options, &option_index);
 		if (c == -1)
 			break;
@@ -328,6 +338,14 @@ int main(int ac, char *av[])
 			case 'p':
 				free((void *)opts.port);
 				opts.port = strdup(optarg);
+				break;
+			case 'S':
+				ret = optarg_set_socketopts(optarg, socket_options);
+				if (ret != SUCCESS) {
+					err_msg("socket option %s not supported", optarg);
+					print_usage(av[0]);
+					exit(EXIT_FAILOPT);
+				}
 				break;
 			case 't':
 				if (!strcasecmp("tcp", optarg)) {
@@ -358,10 +376,13 @@ int main(int ac, char *av[])
 	msg("initialize server socket");
 	socket_fd = init_srv_socket(&opts);
 
+	/* set all previously set socket option */
+	set_socketopts(socket_fd, opts.ai_protocol);
+
 	switch (opts.ai_protocol) {
 	case IPPROTO_TCP:
 		while (!opts.iteration_limit || opts.iterations--)
-			process_cli_request_tcp(socket_fd);
+			process_cli_request_tcp(socket_fd, &opts);
 		break;
 	case IPPROTO_UDP:
 		while (!opts.iteration_limit || opts.iterations--)
