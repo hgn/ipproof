@@ -305,8 +305,9 @@ int main(int ac, char *av[])
 	opts.iteration_limit  = 0;
 	opts.port             = strdup(DEFAULT_PORT);
 
-	init_network_stack();
+	msg(PROGRAMNAME " - " VERSIONSTRING);
 
+	init_network_stack();
 
 	while (1) {
 		int option_index = 0;

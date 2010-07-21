@@ -159,6 +159,8 @@ int main(int ac, char *av[])
 	opts.check_payload    = 0;
 	opts.af_family        = AF_UNSPEC;
 
+	msg(PROGRAMNAME " - " VERSIONSTRING);
+
 	init_network_stack();
 
 	while (1) {
@@ -256,7 +258,7 @@ int main(int ac, char *av[])
 	}
 
 	if (!opts.hostname) {
-		err_msg("no hostname given, -h");
+		err_msg("no hostname given (via commandline option \"-e <hostname>\")");
 		print_usage(av[0]);
 		exit(EXIT_FAILOPT);
 	}

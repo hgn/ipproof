@@ -72,6 +72,9 @@
 
 #endif
 
+#define PROGRAMNAME "ipproof"
+#define VERSIONSTRING "002"
+
 #define	DEFAULT_AI_SOCKTYPE SOCK_STREAM
 #define	DEFAULT_AI_PROTOCOL IPPROTO_TCP
 
@@ -98,7 +101,30 @@ typedef _W64 int ssize_t;
 # define TCP_COOKIE_TRANSACTIONS 15
 #endif
 
-/* what a horrible workaround */
+/* IP_MTU_DISCOVER values */
+
+/* Never send DF frames */
+#ifndef IP_PMTUDISC_DONT
+# define IP_PMTUDISC_DONT  0
+#endif
+
+/* Use per route hints */
+#ifndef IP_PMTUDISC_WANT
+# define IP_PMTUDISC_WANT 1
+#endif
+
+/* Always DF */
+#ifndef IP_PMTUDISC_DO
+# define IP_PMTUDISC_DO 2
+#endif
+
+/* Ignore dst pmtu */
+#ifndef IP_PMTUDISC_PROBE
+# define IP_PMTUDISC_PROBE 3
+#endif
+
+
+/*  a horrible workaround */
 #if defined(WIN32)
 # pragma pack(push,1)
 #endif
