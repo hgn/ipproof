@@ -159,8 +159,10 @@ static const char *setsockopt_level_tostr(int level)
 	case SOL_SOCKET: return "SOL_SOCKET";
 	case IPPROTO_IP: return "IPPROTO_IP";
 	case IPPROTO_TCP: return "IPPROTO_TCP";
+#if  defined(HAVE_UDPLITE_SUPPORT) && defined(HAVE_SCTP_SUPPORT)
 	case IPPROTO_SCTP: return "IPROTO_SCTP";
 	case IPPROTO_UDPLITE: return "IPPROTO_UDPLITE";
+#endif
 	default: return NULL;
 	}
 }
