@@ -85,7 +85,18 @@ typedef _W64 int ssize_t;
 # endif
 #endif
 
+/* some brand new linux tcp options */
+#ifndef TCP_THIN_LINEAR_TIMEOUTS
+# define TCP_THIN_LINEAR_TIMEOUTS 16
+#endif
 
+#ifndef TCP_THIN_DUPACK
+# define TCP_THIN_DUPACK 17
+#endif
+
+#ifndef TCP_COOKIE_TRANSACTIONS
+# define TCP_COOKIE_TRANSACTIONS 15
+#endif
 
 /* what a horrible workaround */
 #if defined(WIN32)
