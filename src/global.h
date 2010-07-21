@@ -129,11 +129,12 @@ typedef _W64 int ssize_t;
 # pragma pack(push,1)
 #endif
 struct packet {
-	uint16_t magic;
-	uint16_t sequence_no;
+	uint8_t magic;
+	uint8_t sequence_no;
 	uint32_t data_len_tx;
 	uint32_t data_len_rx;
-	uint32_t server_delay;
+	uint16_t server_delay; /* delay and delay variance encoded in ms */
+	uint16_t server_delay_var;
 	char data[0];
 }
 #if defined(WIN32)

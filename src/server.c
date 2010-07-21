@@ -25,7 +25,7 @@
 extern struct socket_options socket_options[];
 
 struct conn_data {
-	uint16_t sequence_no;
+	uint8_t sequence_no;
 	int sequence_initialized;
 };
 
@@ -47,8 +47,9 @@ static int rx_tx_data_tcp(int fd, struct conn_data *conn_data)
 	int ret;
 	char *data_rx, *data_tx;
 	struct packet packet;
-	uint32_t server_delay, data_len_tx, data_len_rx;
-	uint16_t sequence_no;
+	uint32_t data_len_tx, data_len_rx;
+	uint16_t server_delay, server_delay_var;
+	uint8_t sequence_no;
 
 
 	data_rx = data_tx = NULL;
@@ -61,16 +62,17 @@ static int rx_tx_data_tcp(int fd, struct conn_data *conn_data)
 	}
 
 	/* some sanity checks */
-	if (ntohs(packet.magic) != MAGIC_COOKIE) {
+	if (packet.magic != MAGIC_COOKIE) {
 		msg("not a valid packet (cookie mismatch)");
 		xclose(fd);
 		return FAILURE;
 	}
 
-	server_delay = ntohl(packet.server_delay);
-	data_len_tx  = ntohl(packet.data_len_tx);
-	data_len_rx  = ntohl(packet.data_len_rx);
-	sequence_no  = ntohs(packet.sequence_no);
+	data_len_tx      = ntohl(packet.data_len_tx);
+	data_len_rx      = ntohl(packet.data_len_rx);
+	sequence_no      = packet.sequence_no;
+	server_delay     = ntohs(packet.server_delay);
+	server_delay_var = ntohs(packet.server_delay_var);
 
 	if (!conn_data->sequence_initialized) {
 		conn_data->sequence_no = sequence_no;
@@ -85,8 +87,8 @@ static int rx_tx_data_tcp(int fd, struct conn_data *conn_data)
 	}
 
 
-	msg("   client data [tx data %u, rx data: %u, server delay %u ms, sequence number: %u]",
-			data_len_tx, data_len_rx, server_delay, ntohs(packet.sequence_no));
+	msg("   client data [tx data %u, rx data: %u, server delay %u ms, server delay variation %u ms, sequence number: %u]",
+			data_len_tx, data_len_rx, server_delay, server_delay_var, packet.sequence_no);
 
 
 	data_rx = xzalloc(data_len_tx);
@@ -106,6 +108,7 @@ static int rx_tx_data_tcp(int fd, struct conn_data *conn_data)
 
 	if (server_delay > 0) {
 		msg("   sleep for %u ms", server_delay);
+		/* FIXME: add variation */
 		msleep(server_delay);
 	}
 

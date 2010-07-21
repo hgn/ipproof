@@ -32,7 +32,8 @@ struct opts {
 	unsigned long packet_interval; /* in usec */
 	unsigned verbose_level;
 	unsigned iterations;
-	uint32_t server_delay;
+	uint16_t server_delay;
+	uint16_t server_delay_var;
 	int iteration_limit;
 	int check_payload;
 	int af_family; /* AF_UNSPEC, AF_INET or AF_INET6 */
@@ -130,7 +131,8 @@ static void print_usage(const char *me)
 			"   --iterations (-n) <number>\t\tlimit the number of transmissions\n"
 			"   --txpacketsize (-s) <number>\t\tsize of the generated packet (excluding TCP/IP header)\n"
 			"   --rxpacketsize (-r) <number>\t\tsize of the received packet (excluding TCP/IP header)\n"
-			"   --serverdelay (-d) <number>\t\tnumber of seconds until the server echo the data back\n"
+			"   --server-delay (-d) <number>\t\tnumber of seconds until the server echo the data back\n"
+			"   --server-delay-variation (-D) <number>\t\tnumber of additional seconds which are random add the server echo the data back\n"
 			"   --check (-c)\t\t\tcheck payload for bit errors\n"
 			"   --setsockopt (-S) <option:arg1:arg2:...>\tset the socketoption \"option\" with argument arg1, arg2, ...\n"
 			"   --verbose (-v)\t\t\tverbose output to STDOUT\n", me);
@@ -145,6 +147,7 @@ int main(int ac, char *av[])
 	struct packet *packet;
 	struct opts opts;
 	double start, end;
+	int32_t val32;
 
 	memset(&opts, 0, sizeof(opts));
 
@@ -154,6 +157,7 @@ int main(int ac, char *av[])
 	opts.ai_socktype      = DEFAULT_AI_SOCKTYPE;
 	opts.ai_protocol      = DEFAULT_AI_PROTOCOL;
 	opts.server_delay     = 0;
+	opts.server_delay_var = 0;
 	opts.iteration_limit  = 0;
 	opts.port             = strdup(DEFAULT_PORT);
 	opts.check_payload    = 0;
@@ -174,7 +178,8 @@ int main(int ac, char *av[])
 			{"iterations",   1, 0, 'n'},
 			{"txpacketsize", 1, 0, 's'},
 			{"rxpacketsize", 1, 0, 'r'},
-			{"serverdelay",  1, 0, 'd'},
+			{"server-delay",  1, 0, 'd'},
+			{"server-delay-variation",  1, 0, 'D'},
 			{"port",         1, 0, 'p'},
 			{"check",        1, 0, 'c'},
 			{"help",         0, 0, 'h'},
@@ -182,7 +187,7 @@ int main(int ac, char *av[])
 			{"setsockopt",   1, 0, 'S'},
 			{0, 0, 0, 0}
 		};
-		c = xgetopt_long(ac, av, "t:i:s:t:e:p:n:d:r:S:vhc46",
+		c = xgetopt_long(ac, av, "t:i:s:t:e:p:n:d:D:r:S:vhc46",
 				long_options, &option_index);
 		if (c == -1)
 			break;
@@ -211,7 +216,18 @@ int main(int ac, char *av[])
 				opts.rx_packet_size = atoi(optarg);
 				break;
 			case 'd':
-				opts.server_delay = atoi(optarg);
+				val32 = atoi(optarg);
+				if (val32 > UINT16_MAX || val32 < 0)
+					err_msg_die(EXIT_FAILOPT, "client delay out of range: shoud 0-%d, is %d",
+							UINT16_MAX, val32);
+				opts.server_delay = (uint16_t)val32;
+				break;
+			case 'D':
+				val32 = atoi(optarg);
+				if (val32 > UINT16_MAX || val32 < 0)
+					err_msg_die(EXIT_FAILOPT, "client delay variation out of range: shoud 0-%d, is %d",
+							UINT16_MAX, val32);
+				opts.server_delay_var = (uint16_t)val32;
 				break;
 			case 'e':
 				opts.hostname = strdup(optarg);
@@ -282,11 +298,12 @@ int main(int ac, char *av[])
 	opts.tx_packet_size -= sizeof(struct packet);
 
 
-	packet->magic        = htons(MAGIC_COOKIE);
-	packet->sequence_no  = 0;
-	packet->data_len_tx  = htonl(opts.tx_packet_size);
-	packet->data_len_rx  = htonl(opts.rx_packet_size);
-	packet->server_delay = htonl(opts.server_delay);
+	packet->magic            = MAGIC_COOKIE;
+	packet->sequence_no      = 0;
+	packet->data_len_tx      = htonl(opts.tx_packet_size);
+	packet->data_len_rx      = htonl(opts.rx_packet_size);
+	packet->server_delay     = htons(opts.server_delay);
+	packet->server_delay_var = htons(opts.server_delay_var);
 
 	memset(packet->data, PAYLOAD_BYTE_PATTERN, opts.tx_packet_size);
 
@@ -306,7 +323,7 @@ int main(int ac, char *av[])
 		if (ret != SUCCESS)
 			break;
 
-		packet->sequence_no = htons(ntohs(packet->sequence_no) + 1);
+		packet->sequence_no = packet->sequence_no + 1;
 
 		/* wait and read data from server */
 		if (opts.rx_packet_size) {
