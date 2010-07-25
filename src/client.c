@@ -39,6 +39,12 @@ struct opts {
 	int af_family; /* AF_UNSPEC, AF_INET or AF_INET6 */
 	int ai_socktype;
 	int ai_protocol;
+
+	/* variables to model random packet distribution */
+	int random_enabled;
+	unsigned random_min;
+	unsigned random_max;
+	unsigned random_bandwidth;
 };
 
 
@@ -123,19 +129,97 @@ static void print_usage(const char *me)
 {
 	fprintf(stdout, "%s <options>\n"
 			"Options:\n"
-			"   --ipv4 (-4)\t\t\tenforces to use AF_INET socket (default AF_UNSPEC)\n"
-			"   --ipv6 (-6)\t\t\tenforces to use AF_INET6 socket (default AF_UNSPEC)\n"
+			"   --ipv4 (-4)\t\t\t\tenforces to use AF_INET socket (default AF_UNSPEC)\n"
+			"   --ipv6 (-6)\t\t\t\tenforces to use AF_INET6 socket (default AF_UNSPEC)\n"
 			"   --hostname (-e) <hostname>\t\tspecify the destiantion host\n"
 			"   --port (-p) <port>\t\t\tdestination port of connection\n"
 			"   --interval (-i)\t\t\tinterval between the generation (and reception) of packets\n"
 			"   --iterations (-n) <number>\t\tlimit the number of transmissions\n"
 			"   --txpacketsize (-s) <number>\t\tsize of the generated packet (excluding TCP/IP header)\n"
 			"   --rxpacketsize (-r) <number>\t\tsize of the received packet (excluding TCP/IP header)\n"
-			"   --server-delay (-d) <number>\t\tnumber of seconds until the server echo the data back\n"
-			"   --server-delay-variation (-D) <number>\t\tnumber of additional seconds which are random add the server echo the data back\n"
-			"   --check (-c)\t\t\tcheck payload for bit errors\n"
+			"   --server-delay (-d) <number>\t\tnumber of us until the server echo the data back\n"
+			"   --server-delay-variation (-D) <number>\tnumber of additional us which are random add the server echo the data back\n"
+			"   --check (-c)\t\t\t\tcheck payload for bit errors\n"
 			"   --setsockopt (-S) <option:arg1:arg2:...>\tset the socketoption \"option\" with argument arg1, arg2, ...\n"
-			"   --verbose (-v)\t\t\tverbose output to STDOUT\n", me);
+			"   --random (-R) <min:max:bw>\t\t\tgenerator to generate randomly generated traffic pattern\n"
+			"   --verbose (-v)\t\t\t\tverbose output to STDOUT\n", me);
+}
+
+/* in MBit */
+#define	MAX_BANDWIDTH 100
+
+static int setup_random_traffic(struct opts *opts, int min, int max, int bw)
+{
+	/* sanity checks first */
+
+
+	if (min < (int)sizeof(struct packet) || min > MAX_UDP_DATAGRAM) {
+		err_msg("packet minimum is unacceptable. Is %d, must %d - %d",
+				min, sizeof(struct packet), MAX_UDP_DATAGRAM);
+		return FAILURE;
+	}
+
+	if (max < (int)sizeof(struct packet) || max > MAX_UDP_DATAGRAM) {
+		err_msg("packet maximum is unacceptable. Is %d, must %d - %d",
+				max, sizeof(struct packet), MAX_UDP_DATAGRAM);
+		return FAILURE;
+	}
+
+	if (min > max) {
+		err_msg("packet minimum %d is larger as maximum %d", min, max);
+		return FAILURE;
+	}
+
+	if (bw <= 0 || bw > MAX_BANDWIDTH) {
+		err_msg("bandwidth is unacceptable: %d MBit (must between %d and %d)",
+				bw, 0, MAX_BANDWIDTH);
+		return FAILURE;
+	}
+
+	msg("random traffic generator [min %d byte, max: %d byte, bw: %d Mbit]",
+			min, max, bw);
+
+	return SUCCESS;
+}
+
+
+static int optarg_set_random_traffic(const char *option_arg, struct opts *opts)
+{
+	int ret = FAILURE;
+	const char delimiter[] = ":;,";
+	char *token, *cp;
+	int min, max, bw;
+
+	cp = strdup(option_arg);
+	token = strtok(cp, delimiter); /* first word */
+	if (!token)
+		goto out;
+
+	min = atoi(token);
+
+	token = strtok(NULL, delimiter);
+	if (!token)
+		goto out;
+
+	max = atoi(token);
+
+	token = strtok(NULL, delimiter);
+	if (!token)
+		goto out;
+
+	bw = atoi(token);
+
+	if (setup_random_traffic(opts, min, max, bw) != SUCCESS)
+		goto out;
+
+	opts->random_enabled = 1;
+
+	ret = SUCCESS;
+
+out:
+	free(cp);
+
+	return ret;
 }
 
 
@@ -162,8 +246,7 @@ int main(int ac, char *av[])
 	opts.port             = strdup(DEFAULT_PORT);
 	opts.check_payload    = 0;
 	opts.af_family        = AF_UNSPEC;
-
-	msg(PROGRAMNAME " - " VERSIONSTRING);
+	opts.random_enabled   = 0;
 
 	init_network_stack();
 
@@ -185,9 +268,10 @@ int main(int ac, char *av[])
 			{"help",         0, 0, 'h'},
 			{"transport",    1, 0, 't'},
 			{"setsockopt",   1, 0, 'S'},
+			{"random",       1, 0, 'R'},
 			{0, 0, 0, 0}
 		};
-		c = xgetopt_long(ac, av, "t:i:s:t:e:p:n:d:D:r:S:vhc46",
+		c = xgetopt_long(ac, av, "t:i:s:t:e:p:n:d:D:r:S:R:vhc46",
 				long_options, &option_index);
 		if (c == -1)
 			break;
@@ -256,13 +340,19 @@ int main(int ac, char *av[])
 					opts.ai_protocol = IPPROTO_UDP;
 				} else {
 					err_msg("protocol %s not supported", optarg);
-					print_usage(av[0]);
 					exit(EXIT_FAILOPT);
 				}
 				break;
 			case 'h':
 				print_usage(av[0]);
 				exit(EXIT_SUCCESS);
+				break;
+			case 'R':
+				ret = optarg_set_random_traffic(optarg, &opts);
+				if (ret != SUCCESS) {
+					err_msg("failure in parsing traffic pattern", optarg);
+					exit(EXIT_FAILOPT);
+				}
 				break;
 			case '?':
 				break;
@@ -291,6 +381,11 @@ int main(int ac, char *av[])
 				opts.tx_packet_size, MAX_UDP_DATAGRAM);
 		exit(EXIT_FAILOPT);
 	}
+
+	if (opts.random_enabled && opts.ai_protocol != IPPROTO_UDP)
+		err_msg_die(EXIT_FAILOPT, "random option only useful for UDP sockets (-t udp)");
+
+	msg(PROGRAMNAME " - " VERSIONSTRING);
 
 	packet = xzalloc(opts.tx_packet_size);
 

@@ -18,8 +18,10 @@
 
 #include "global.h"
 
+
 static int conv_ip_mtu_discover(const char *s)
 {
+	size_t i;
 	static const struct {
 		const char *symname;
 		int sym;
@@ -29,15 +31,16 @@ static int conv_ip_mtu_discover(const char *s)
 		{"IP_PMTUDISC_DONT", IP_PMTUDISC_DONT},
 		{"IP_PMTUDISC_PROBE", IP_PMTUDISC_PROBE}
 	};
-	size_t i;
 
 	for (i=0 ; i < ARRAY_SIZE(symtab); i++)
 		if (strcasecmp(s, symtab[i].symname) == 0)
 			return symtab[i].sym;
 
 	fputs("MTU_DISCOVER: Known arguments:\n", stderr);
+
 	for (i=0 ; i < ARRAY_SIZE(symtab); i++)
 		fprintf(stderr, "%s\n", symtab[i].symname);
+
 	exit(1);
 }
 
@@ -72,7 +75,6 @@ struct socket_options socket_options[] = {
 };
 
 
-
 void xsetsockopt(int s, int level, int optname,
 		const void *optval, socklen_t optlen, const char *str)
 {
@@ -86,12 +88,14 @@ void xsetsockopt(int s, int level, int optname,
 }
 
 
-static void ignore_sigpipe(void)
+static int ignore_sigpipe(void)
 {
 	struct sigaction sa = { .sa_handler = SIG_IGN };
+
 	sigemptyset(&sa.sa_mask);
 	sa.sa_flags = 0;
-	sigaction(SIGPIPE, &sa, NULL);
+
+	return sigaction(SIGPIPE, &sa, NULL);
 }
 
 
@@ -315,8 +319,8 @@ ssize_t read_len(int fd, const void *buf, size_t len)
 
 void init_network_stack(void)
 {
-#if defined(WIN32)
 	int err;
+#if defined(WIN32)
 	WSADATA wsaData;
 
 	err = WSAStartup(MAKEWORD(2, 2), &wsaData);
@@ -329,7 +333,9 @@ void init_network_stack(void)
 	/* SIGPIPE signal will be received if the peer has gone away
 	 * and an attempt is made to write data to the peer. Ignoring this
 	 * signal causes the write operation to receive an EPIPE error */
-	ignore_sigpipe();
+	err = ignore_sigpipe();
+	if (err < 0)
+		err_msg_die(EXIT_FAILMISC, "failure in ignoring SIGPIPE signal");
 #endif
 }
 
@@ -360,7 +366,7 @@ int xgetopt_long(int ac, char * const av[],
 #define	CC_AVAIL_ALGORITHMS "/proc/sys/net/ipv4/tcp_available_congestion_control"
 
 
-void die_print_cong_alg(void)
+static void die_print_cong_alg(int exit_val)
 {
 	static const char avail_cg[] = CC_AVAIL_ALGORITHMS;
 	FILE *f;
@@ -376,16 +382,16 @@ void die_print_cong_alg(void)
 		fputs(buf, stderr);
 
 	fclose(f);
-	exit(EXIT_FAILOPT);
+	exit(exit_val);
 }
 
 
-void die_print_setsockopts(void)
+static void die_print_setsockopts(int ret_val)
 {
 	unsigned i;
 
 	fputs("Known setsockopt optnames:\n", stderr);
-	fputs("level\toptname\t\toptval\n", stderr);
+	fputs("level\t\toptname\t\t\toptval\n", stderr);
 
 	for (i = 0; socket_options[i].sockopt_name; i++) {
 		fprintf(stderr, "%s\t%s\t\t%s\n",
@@ -394,7 +400,7 @@ void die_print_setsockopts(void)
 			setsockopt_optvaltype_tostr(socket_options[i].sockopt_type));
 	}
 
-	exit(EXIT_FAILOPT);
+	exit(ret_val);
 }
 
 
@@ -670,6 +676,13 @@ int optarg_set_socketopts(const char *option_arg, struct socket_options *so)
 	const char delimiter[] = ":";
 	char *token, *cp;
 	char *s1;
+
+	/* special option to list all possibles socket options */
+	if (streq(option_arg, "help"))
+		die_print_setsockopts(EXIT_SUCCESS);
+
+	if (streq(option_arg, "help-congestion-control"))
+		die_print_cong_alg(EXIT_SUCCESS);
 
 	cp = strdup(option_arg);
 	token = strtok(cp, delimiter); /* first word */

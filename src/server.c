@@ -166,7 +166,7 @@ static void process_cli_request_tcp(int server_fd, struct opts *opts)
 
 	conn_data.sequence_initialized = 0;
 
-	msg("block in accept(2) ...");
+	msg("block in accept(2)");
 	connected_fd = accept(server_fd, (struct sockaddr *) &sa, &sa_len);
 	if (connected_fd == -1) {
 		err_sys("accept error");
@@ -272,7 +272,8 @@ static int init_srv_socket(const struct opts *opts)
 				"Don't found a suitable TCP socket to connect to the client"
 				", giving up");
 
-	msg("bind to %s %s socket -> %s:%s", network_protocol_str(opts->ai_protocol),
+	msg("bind to port %s via %s using %s socket [%s:%s]",
+			opts->port, network_protocol_str(opts->ai_protocol),
 			network_family_str(addrtmp->ai_family),
 			addrtmp->ai_family == AF_INET ? "0.0.0.0" : "::", opts->port);
 
