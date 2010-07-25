@@ -74,6 +74,7 @@ static int tx_data(struct opts *o, struct packet *packet, int fd)
 		err_msg_die(EXIT_FAILINT, "packet too small - programmed error");
 
 	msg("transmit %u byte", size);
+
 	ret = write_len(fd, packet, size);
 	if (ret != SUCCESS) {
 		err_msg("failure in socket write operation");
@@ -494,6 +495,9 @@ int main(int ac, char *av[])
 		ret = tx_data(&opts, packet, socket_fd);
 		if (ret != SUCCESS)
 			break;
+
+		if (delay > 0)
+			xusleep(delay);
 
 		packet->sequence_no = packet->sequence_no + 1;
 
