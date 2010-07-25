@@ -146,13 +146,11 @@ static void print_usage(const char *me)
 }
 
 /* in MBit */
-#define	MAX_BANDWIDTH 100
+#define	MAX_BANDWIDTH 1000
 
 static int setup_random_traffic(struct opts *opts, int min, int max, int bw)
 {
 	/* sanity checks first */
-
-
 	if (min < (int)sizeof(struct packet) || min > MAX_UDP_DATAGRAM) {
 		err_msg("packet minimum is unacceptable. Is %d, must %d - %d",
 				min, sizeof(struct packet), MAX_UDP_DATAGRAM);
@@ -176,8 +174,12 @@ static int setup_random_traffic(struct opts *opts, int min, int max, int bw)
 		return FAILURE;
 	}
 
-	msg("random traffic generator [min %d byte, max: %d byte, bw: %d Mbit]",
+	msg("random traffic generator [min %d byte, max: %d byte, bw: %d Mbit/s]",
 			min, max, bw);
+
+	opts->random_min = min;
+	opts->random_max = max;
+	opts->random_bandwidth = bw;
 
 	return SUCCESS;
 }
@@ -222,36 +224,28 @@ out:
 	return ret;
 }
 
-
-int main(int ac, char *av[])
+static int xgetopts(int ac, char **av, struct opts *opts)
 {
-	int socket_fd, c, ret;
-	size_t sret;
-	char *data_rx;
-	struct packet *packet;
-	struct opts opts;
-	double start, end;
+	int ret, c;
 	int32_t val32;
+	int option_index = 0;
 
-	memset(&opts, 0, sizeof(opts));
+	memset(opts, 0, sizeof(*opts));
 
-	opts.packet_interval  = DEFAULT_PACKET_INTERVAL;
-	opts.tx_packet_size   = DEFAULT_PACKET_SIZE;
-	opts.rx_packet_size   = DEFAULT_PACKET_SIZE;
-	opts.ai_socktype      = DEFAULT_AI_SOCKTYPE;
-	opts.ai_protocol      = DEFAULT_AI_PROTOCOL;
-	opts.server_delay     = 0;
-	opts.server_delay_var = 0;
-	opts.iteration_limit  = 0;
-	opts.port             = strdup(DEFAULT_PORT);
-	opts.check_payload    = 0;
-	opts.af_family        = AF_UNSPEC;
-	opts.random_enabled   = 0;
-
-	init_network_stack();
+	opts->packet_interval  = DEFAULT_PACKET_INTERVAL;
+	opts->tx_packet_size   = DEFAULT_PACKET_SIZE;
+	opts->rx_packet_size   = DEFAULT_PACKET_SIZE;
+	opts->ai_socktype      = DEFAULT_AI_SOCKTYPE;
+	opts->ai_protocol      = DEFAULT_AI_PROTOCOL;
+	opts->server_delay     = 0;
+	opts->server_delay_var = 0;
+	opts->iteration_limit  = 0;
+	opts->port             = strdup(DEFAULT_PORT);
+	opts->check_payload    = 0;
+	opts->af_family        = AF_UNSPEC;
+	opts->random_enabled   = 0;
 
 	while (1) {
-		int option_index = 0;
 		static struct option long_options[] = {
 			{"ipv4",         1, 0, '4'},
 			{"ipv6",         1, 0, '6'},
@@ -278,50 +272,50 @@ int main(int ac, char *av[])
 
 		switch (c) {
 			case '4':
-				opts.af_family = AF_INET;
+				opts->af_family = AF_INET;
 				break;
 			case '6':
-				opts.af_family = AF_INET6;
+				opts->af_family = AF_INET6;
 				break;
 			case 'v':
-				opts.verbose_level++;
+				opts->verbose_level++;
 				break;
 			case 'i':
-				opts.packet_interval = atoi(optarg);
+				opts->packet_interval = atoi(optarg);
 				break;
 			case 'n':
-				opts.iterations = atoi(optarg);
-				opts.iteration_limit = 1;
+				opts->iterations = atoi(optarg);
+				opts->iteration_limit = 1;
 				break;
 			case 's':
-				opts.tx_packet_size = atoi(optarg);
+				opts->tx_packet_size = atoi(optarg);
 				break;
 			case 'r':
-				opts.rx_packet_size = atoi(optarg);
+				opts->rx_packet_size = atoi(optarg);
 				break;
 			case 'd':
 				val32 = atoi(optarg);
 				if (val32 > UINT16_MAX || val32 < 0)
 					err_msg_die(EXIT_FAILOPT, "client delay out of range: shoud 0-%d, is %d",
 							UINT16_MAX, val32);
-				opts.server_delay = (uint16_t)val32;
+				opts->server_delay = (uint16_t)val32;
 				break;
 			case 'D':
 				val32 = atoi(optarg);
 				if (val32 > UINT16_MAX || val32 < 0)
 					err_msg_die(EXIT_FAILOPT, "client delay variation out of range: shoud 0-%d, is %d",
 							UINT16_MAX, val32);
-				opts.server_delay_var = (uint16_t)val32;
+				opts->server_delay_var = (uint16_t)val32;
 				break;
 			case 'e':
-				opts.hostname = strdup(optarg);
+				opts->hostname = strdup(optarg);
 				break;
 			case 'p':
-				free(opts.port);
-				opts.port = strdup(optarg);
+				free(opts->port);
+				opts->port = strdup(optarg);
 				break;
 			case 'c':
-				opts.check_payload = 1;
+				opts->check_payload = 1;
 				break;
 			case 'S':
 				ret = optarg_set_socketopts(optarg, socket_options);
@@ -333,11 +327,11 @@ int main(int ac, char *av[])
 				break;
 			case 't':
 				if (!strcasecmp("tcp", optarg)) {
-					opts.ai_socktype = SOCK_STREAM;
-					opts.ai_protocol = IPPROTO_TCP;
+					opts->ai_socktype = SOCK_STREAM;
+					opts->ai_protocol = IPPROTO_TCP;
 				} else if (!strcasecmp("udp", optarg)) {
-					opts.ai_socktype = SOCK_DGRAM;
-					opts.ai_protocol = IPPROTO_UDP;
+					opts->ai_socktype = SOCK_DGRAM;
+					opts->ai_protocol = IPPROTO_UDP;
 				} else {
 					err_msg("protocol %s not supported", optarg);
 					exit(EXIT_FAILOPT);
@@ -348,7 +342,7 @@ int main(int ac, char *av[])
 				exit(EXIT_SUCCESS);
 				break;
 			case 'R':
-				ret = optarg_set_random_traffic(optarg, &opts);
+				ret = optarg_set_random_traffic(optarg, opts);
 				if (ret != SUCCESS) {
 					err_msg("failure in parsing traffic pattern", optarg);
 					exit(EXIT_FAILOPT);
@@ -363,27 +357,46 @@ int main(int ac, char *av[])
 		}
 	}
 
-	if (!opts.hostname) {
+	if (!opts->hostname) {
 		err_msg("no hostname given (via commandline option \"-e <hostname>\")");
 		print_usage(av[0]);
 		exit(EXIT_FAILOPT);
 	}
 
-	if (opts.tx_packet_size < sizeof(struct packet)) {
+	if (opts->tx_packet_size < sizeof(struct packet)) {
 		err_msg("require at least %u byte of data (due to header data)",
 				sizeof(struct packet));
 		exit(EXIT_FAILOPT);
 	}
 
-	if (opts.ai_protocol == IPPROTO_UDP && opts.tx_packet_size > MAX_UDP_DATAGRAM) {
+	if (opts->ai_protocol == IPPROTO_UDP && opts->tx_packet_size > MAX_UDP_DATAGRAM) {
 		err_msg("UDP datagram size to send to large and exceed Ethernet Jumbogram size (%d > %d(max))\n"
 				"If you want to adjust this value see MAX_UDP_DATAGRAM)",
-				opts.tx_packet_size, MAX_UDP_DATAGRAM);
+				opts->tx_packet_size, MAX_UDP_DATAGRAM);
 		exit(EXIT_FAILOPT);
 	}
 
-	if (opts.random_enabled && opts.ai_protocol != IPPROTO_UDP)
+	if (opts->random_enabled && opts->ai_protocol != IPPROTO_UDP)
 		err_msg_die(EXIT_FAILOPT, "random option only useful for UDP sockets (-t udp)");
+
+	return SUCCESS;
+}
+
+
+int main(int ac, char *av[])
+{
+	int socket_fd, ret;
+	size_t sret;
+	char *data_rx;
+	struct packet *packet;
+	struct opts opts;
+	double start, end;
+
+	init_network_stack();
+
+	ret = xgetopts(ac, av, &opts);
+	if (ret != SUCCESS)
+		err_msg_die(EXIT_FAILOPT, "failure in commandline options");
 
 	msg(PROGRAMNAME " - " VERSIONSTRING);
 

@@ -181,7 +181,7 @@ static void process_cli_request_tcp(int server_fd, struct opts *opts)
 	if (ret != 0)
 		err_msg_die(EXIT_FAILNET, "getnameinfo error: %s",  gai_strerror(ret));
 
-	msg("accept from %s:%s", hbuf, sbuf);
+	msg("connection established from %s:%s", hbuf, sbuf);
 
 	while (rx_tx_data_tcp(connected_fd, &conn_data) == SUCCESS)
 		;
