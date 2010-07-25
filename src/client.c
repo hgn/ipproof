@@ -34,7 +34,7 @@ struct opts {
 	unsigned iterations;
 	uint16_t server_delay;
 	uint16_t server_delay_var;
-	int iteration_limit;
+	int iteration_limit_enabled;
 	int check_payload;
 	int af_family; /* AF_UNSPEC, AF_INET or AF_INET6 */
 	int ai_socktype;
@@ -44,18 +44,39 @@ struct opts {
 	int random_enabled;
 	unsigned random_min;
 	unsigned random_max;
-	unsigned random_bandwidth;
+	unsigned random_bandwidth; /* bit/s */
 };
+
+
+static int is_random_traffic_enabled(const struct opts *opts)
+{
+	return opts->ai_protocol == IPPROTO_UDP && opts->random_enabled;
+}
 
 
 static int tx_data(struct opts *o, struct packet *packet, int fd)
 {
-	int ret;
+	int ret, size;
 
-	msg("transmit %u byte header to server ", o->tx_packet_size + sizeof(struct packet));
-	ret = write_len(fd, packet, o->tx_packet_size + sizeof(struct packet));
+	size = o->tx_packet_size + sizeof(struct packet);
+
+	if (is_random_traffic_enabled(o)) {
+		if (o->random_min == o->random_max) {
+			size = o->random_min;
+			packet->data_len_tx = htonl(size);
+		} else {
+			size = (random() % (o->random_max - o->random_min)) + o->random_min;
+			packet->data_len_tx = htonl(size);
+		}
+	}
+
+	if (size < (int)sizeof(struct packet))
+		err_msg_die(EXIT_FAILINT, "packet too small - programmed error");
+
+	msg("transmit %u byte", size);
+	ret = write_len(fd, packet, size);
 	if (ret != SUCCESS) {
-		err_msg("failure in socket write (header)");
+		err_msg("failure in socket write operation");
 		return FAILURE;
 	}
 
@@ -168,13 +189,13 @@ static int setup_random_traffic(struct opts *opts, int min, int max, int bw)
 		return FAILURE;
 	}
 
-	if (bw <= 0 || bw > MAX_BANDWIDTH) {
-		err_msg("bandwidth is unacceptable: %d MBit (must between %d and %d)",
-				bw, 0, MAX_BANDWIDTH);
+	if (bw <= 0 || (bw /1000000) > MAX_BANDWIDTH) {
+		err_msg("bandwidth is unacceptable: %d bit/s (must between %d and %d)",
+				bw, 0, MAX_BANDWIDTH * 1000000);
 		return FAILURE;
 	}
 
-	msg("random traffic generator [min %d byte, max: %d byte, bw: %d Mbit/s]",
+	msg("random traffic generator [min %d byte, max: %d byte, bandwidth: %d bit/s]",
 			min, max, bw);
 
 	opts->random_min = min;
@@ -239,7 +260,7 @@ static int xgetopts(int ac, char **av, struct opts *opts)
 	opts->ai_protocol      = DEFAULT_AI_PROTOCOL;
 	opts->server_delay     = 0;
 	opts->server_delay_var = 0;
-	opts->iteration_limit  = 0;
+	opts->iteration_limit_enabled  = 0;
 	opts->port             = strdup(DEFAULT_PORT);
 	opts->check_payload    = 0;
 	opts->af_family        = AF_UNSPEC;
@@ -285,7 +306,7 @@ static int xgetopts(int ac, char **av, struct opts *opts)
 				break;
 			case 'n':
 				opts->iterations = atoi(optarg);
-				opts->iteration_limit = 1;
+				opts->iteration_limit_enabled = 1;
 				break;
 			case 's':
 				opts->tx_packet_size = atoi(optarg);
@@ -383,22 +404,49 @@ static int xgetopts(int ac, char **av, struct opts *opts)
 }
 
 
+static int calculate_random_traffic_delay(const struct opts *opts)
+{
+	int avg, delay;
+
+	if (opts->random_min == opts->random_max)
+		avg = opts->random_min;
+	else
+		avg = ((opts->random_max - opts->random_min) / 2) + opts->random_min;
+
+	if (avg < (int)sizeof(struct packet))
+		avg = sizeof(struct packet);
+
+	avg *= 8;
+
+	delay = (int)(avg * (((double)1000000 * 8) / ((double)opts->random_bandwidth)));
+
+	if (delay < 0 || delay > 1000000) {
+		err_msg("delay to large: is %d and should between 0 and 1000000)"
+				". Adjusting to 1000000", delay);
+		delay = 1000000;
+	}
+
+	return delay;
+}
+
+
 int main(int ac, char *av[])
 {
-	int socket_fd, ret;
+	int socket_fd, ret, delay_target = 0;
 	size_t sret;
 	char *data_rx;
 	struct packet *packet;
 	struct opts opts;
-	double start, end;
+	double start, end, last_packet_time, report_packet_time;
+	int delay = 0;
 
 	init_network_stack();
+
+	msg(PROGRAMNAME " - " VERSIONSTRING);
 
 	ret = xgetopts(ac, av, &opts);
 	if (ret != SUCCESS)
 		err_msg_die(EXIT_FAILOPT, "failure in commandline options");
-
-	msg(PROGRAMNAME " - " VERSIONSTRING);
 
 	packet = xzalloc(opts.tx_packet_size);
 
@@ -416,16 +464,32 @@ int main(int ac, char *av[])
 	memset(packet->data, PAYLOAD_BYTE_PATTERN, opts.tx_packet_size);
 
 	/* this is a simple buffer container. Received data is
-	 * writen there */
+	 * written there */
 	if (opts.tx_packet_size)
 		data_rx = xzalloc(opts.tx_packet_size);
+
+	if (is_random_traffic_enabled(&opts))
+		delay_target = calculate_random_traffic_delay(&opts);
+
 
 	/* connect to server */
 	socket_fd = init_cli_socket(&opts);
 
-	while (!opts.iteration_limit || opts.iterations--) {
+	last_packet_time = xgettimeofday();
 
-		start = xgettimeofday();
+	while (!opts.iteration_limit_enabled || opts.iterations--) {
+
+		int adjust;
+
+		report_packet_time = start = xgettimeofday();
+
+		adjust = delay_target + (last_packet_time - report_packet_time) * 1000000;
+		last_packet_time = start;
+
+		if (adjust > 0 || delay > 0) {
+			delay += adjust;
+			opts.packet_interval = delay;
+		}
 
 		ret = tx_data(&opts, packet, socket_fd);
 		if (ret != SUCCESS)
@@ -470,7 +534,7 @@ int main(int ac, char *av[])
 		}
 
 		if (opts.packet_interval > 0) {
-			msg("   going to sleep for %u us", opts.packet_interval);
+			msg("delay transmission of next packet for %u us", opts.packet_interval);
 			xusleep(opts.packet_interval);
 		}
 	}
