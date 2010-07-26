@@ -709,5 +709,138 @@ out:
 	return ret;
 }
 
+enum {
+	/* SI byte prefixe 10^n */
+	SI_IEC_PREFIX_KBIT = 0,
+	SI_IEC_PREFIX_MBIT,
+	SI_IEC_PREFIX_GBIT,
+	/* IEC byte prefixe 2^n */
+	SI_IEC_PREFIX_KIBIT,
+	SI_IEC_PREFIX_MIBIT,
+	SI_IEC_PREFIX_GIBIT,
+	/* SI byte prefixe 10^n */
+	SI_IEC_PREFIX_KB,
+	SI_IEC_PREFIX_MB,
+	SI_IEC_PREFIX_GB,
+	/* IEC byte prefixe 2^n */
+	SI_IEC_PREFIX_KIB,
+	SI_IEC_PREFIX_MIB,
+	SI_IEC_PREFIX_GIB,
+	SI_IEC_PREFIX_MAX
+};
+
+
+static unsigned long long conversion_faktor_si_iec_to_bit[] = {
+	/* SI_IEC_PREFIX_KBIT */
+	1000ull,
+	/* SI_IEC_PREFIX_MBIT */
+	1000ull * 1000,
+	/* SI_IEC_PREFIX_GBIT */
+	1000ull * 1000 * 1000,
+	/* SI_IEC_PREFIX_KIBIT */
+	1024ull,
+	/* SI_IEC_PREFIX_MIBIT */
+	1024ull * 1024,
+	/* SI_IEC_PREFIX_GIBIT */
+	1024ull * 1024 * 1024,
+	/* SI_IEC_PREFIX_KB */
+	8ull * 1000,
+	/* SI_IEC_PREFIX_MB */
+	8ull * 1000 * 1000,
+	/* SI_IEC_PREFIX_GB */
+	8ull * 1000 * 1000 * 1000,
+	/* SI_IEC_PREFIX_KIB */
+	8ull * 1024,
+	/* SI_IEC_PREFIX_MIB */
+	8ull * 1024 * 1024,
+	/* SI_IEC_PREFIX_GIB */
+	8ull * 1024 * 1024 * 1024,
+};
+
+
+static int convert_si_iec_prefixes(const char *str)
+{
+	if (streq("kilobit", str)) {
+		return SI_IEC_PREFIX_KBIT;
+	} else if (streq("kbit", str)) {
+		return SI_IEC_PREFIX_KBIT;
+	} else if (streq("megabit", str)) {
+		return SI_IEC_PREFIX_MBIT;
+	} else if (streq("Mbit", str)) {
+		return SI_IEC_PREFIX_MBIT;
+	} else if (streq("gigabit", str)) {
+		return SI_IEC_PREFIX_GBIT;
+	} else if (streq("Gbit", str)) {
+		return SI_IEC_PREFIX_GBIT;
+	} else if (streq("kibibit", str)) {
+		return SI_IEC_PREFIX_KIBIT;
+	} else if (streq("Kibit", str)) {
+		return SI_IEC_PREFIX_KIBIT;
+	} else if (streq("mebibit", str)) {
+		return SI_IEC_PREFIX_MIBIT;
+	} else if (streq("Mibit", str)) {
+		return SI_IEC_PREFIX_MIBIT;
+	} else if (streq("gibibit", str)) {
+		return SI_IEC_PREFIX_GIBIT;
+	} else if (streq("Gibit", str)) {
+		return SI_IEC_PREFIX_GIBIT;
+	} else if (streq("kilobyte", str)) {
+		return SI_IEC_PREFIX_KB;
+	} else if (streq("kB", str)) {
+		return SI_IEC_PREFIX_KB;
+	} else if (streq("megabyte", str)) {
+		return SI_IEC_PREFIX_MB;
+	} else if (streq("MB", str)) {
+		return SI_IEC_PREFIX_MB;
+	} else if (streq("gigabyte", str)) {
+		return SI_IEC_PREFIX_GB;
+	} else if (streq("GB", str)) {
+		return SI_IEC_PREFIX_GB;
+	} else if (streq("kibibyte", str)) {
+		return SI_IEC_PREFIX_KIB;
+	} else if (streq("KiB", str)) {
+		return SI_IEC_PREFIX_KIB;
+	} else if (streq("mebibyte", str)) {
+		return SI_IEC_PREFIX_MIB;
+	} else if (streq("MIB", str)) {
+		return SI_IEC_PREFIX_MIB;
+	} else if (streq("gibibyte", str)) {
+		return SI_IEC_PREFIX_GIB;
+	} else if (streq("GiB", str)) {
+		return SI_IEC_PREFIX_GIB;
+	} else {
+		return -1;
+	}
+}
+
+long long byte_atoi(const char *string)
+{
+	int ret, prefix_index;
+	double number;
+	char buf[16];
+
+	ret = sscanf( string, "%lf%15s", &number, buf);
+	if (ret != 2) {
+		msg("bandwidth argument inaccurate. Required is a number, directly"
+				"followed by a suffix: GMKgmk (where the lower letters are SI units (10^n),"
+					"the uppercase letters represent the IEC binary suffixes 2^n) - all units"
+				"in bits, not bytes");
+		return -1;
+	}
+
+	buf[sizeof(buf) - 1] = '\0';
+
+	prefix_index = convert_si_iec_prefixes(buf);
+	if (prefix_index < 0) {
+		msg("prefix is not known: %s", buf);
+		return -1;
+	}
+
+	if (prefix_index > (int)ARRAY_SIZE(conversion_faktor_si_iec_to_bit))
+		err_msg_die(EXIT_FAILINT, "programmed error");
+
+	return (long long) (number *= conversion_faktor_si_iec_to_bit[prefix_index]);
+}
+
 
 /* vim: set tw=78 ts=4 sw=4 sts=4 ff=unix noet: */

@@ -170,7 +170,7 @@ static void print_usage(const char *me)
 /* in MBit */
 #define	MAX_BANDWIDTH 1000
 
-static int setup_random_traffic(struct opts *opts, int min, int max, int bw)
+static int setup_random_traffic(struct opts *opts, int min, int max, long long bw)
 {
 	/* sanity checks first */
 	if (min < (int)sizeof(struct packet) || min > MAX_UDP_DATAGRAM) {
@@ -190,7 +190,7 @@ static int setup_random_traffic(struct opts *opts, int min, int max, int bw)
 		return FAILURE;
 	}
 
-	if (bw <= 0 || (bw /1000000) > MAX_BANDWIDTH) {
+	if (bw <= 0 || (bw / 1000000) > MAX_BANDWIDTH) {
 		err_msg("bandwidth is unacceptable: %d bit/s (must between %d and %d)",
 				bw, 0, MAX_BANDWIDTH * 1000000);
 		return FAILURE;
@@ -212,7 +212,8 @@ static int optarg_set_random_traffic(const char *option_arg, struct opts *opts)
 	int ret = FAILURE;
 	const char delimiter[] = ":;,";
 	char *token, *cp;
-	int min, max, bw;
+	int min, max;
+	long long bw;
 
 	cp = strdup(option_arg);
 	token = strtok(cp, delimiter); /* first word */
@@ -231,7 +232,9 @@ static int optarg_set_random_traffic(const char *option_arg, struct opts *opts)
 	if (!token)
 		goto out;
 
-	bw = atoi(token);
+	bw = byte_atoi(token);
+	if (bw < 0)
+		goto out;
 
 	if (setup_random_traffic(opts, min, max, bw) != SUCCESS)
 		goto out;
