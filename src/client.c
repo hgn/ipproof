@@ -54,19 +54,26 @@ static int is_random_traffic_enabled(const struct opts *opts)
 }
 
 
+/* returns random between [min, max) */
+int rand_range(int min, int max)
+{
+      return (int)((double)rand() / (RAND_MAX + 1) * (max - min) + min);
+}
+
+
 static int tx_data(struct opts *o, struct packet *packet, int fd)
 {
-	int ret, size;
+	ssize_t ret, size;
 
 	size = o->tx_packet_size + sizeof(struct packet);
 
 	if (is_random_traffic_enabled(o)) {
 		if (o->random_min == o->random_max) {
 			size = o->random_min;
-			packet->data_len_tx = htonl(size);
+			packet->data_len_tx = (uint32_t)htonl(size);
 		} else {
-			size = (random() % (o->random_max - o->random_min)) + o->random_min;
-			packet->data_len_tx = htonl(size);
+			size = (rand() % (o->random_max - o->random_min)) + o->random_min;
+			packet->data_len_tx = (uint32_t)htonl(size);
 		}
 	}
 

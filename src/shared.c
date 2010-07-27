@@ -51,26 +51,28 @@ struct socket_options socket_options[] = {
   {"SO_BROADCAST", SOL_SOCKET,  SO_BROADCAST, SVT_BOOL, NULL, 0, {0}},
   {"SO_BROADCAST", SOL_SOCKET,  SO_BROADCAST, SVT_BOOL, NULL, 0, {0}},
   {"SO_BROADCAST", SOL_SOCKET,  SO_BROADCAST, SVT_BOOL,NULL,  0, {0}},
-  {"TCP_NODELAY",  SOL_TCP, TCP_NODELAY,  SVT_BOOL, NULL, 0, {0}},
-  {"TCP_CONGESTION", SOL_TCP, TCP_CONGESTION, SVT_STR, NULL, 0, {0}},
-  {"TCP_CORK",     SOL_TCP, TCP_CORK,  SVT_BOOL, NULL, 0, {0}},
-  {"TCP_KEEPCNT",  SOL_TCP, TCP_KEEPCNT,  SVT_INT, NULL, 0, {0}},
-  {"TCP_KEEPIDLE",  SOL_TCP, TCP_KEEPIDLE,  SVT_INT, NULL, 0, {0}},
-  {"TCP_KEEPINTVL",  SOL_TCP, TCP_KEEPINTVL,  SVT_INT, NULL, 0, {0}},
-  {"TCP_SYNCNT",  SOL_TCP, TCP_SYNCNT,  SVT_INT, NULL, 0, {0}},
-  {"TCP_WINDOW_CLAMP",  SOL_TCP, TCP_WINDOW_CLAMP,  SVT_INT, NULL, 0, {0}},
-  {"TCP_QUICKACK",  SOL_TCP, TCP_QUICKACK,  SVT_BOOL, NULL, 0, {0}},
-  {"TCP_DEFER_ACCEPT",  SOL_TCP, TCP_DEFER_ACCEPT,  SVT_BOOL, NULL, 0, {0}},
-  {"TCP_MAXSEG",  SOL_TCP, TCP_MAXSEG,  SVT_INT, NULL, 0, {0}},
-  {"TCP_THIN_DUPACK",  SOL_TCP, TCP_THIN_DUPACK,  SVT_INT, NULL, 0, {0}},
-  {"TCP_THIN_LINEAR_TIMEOUTS",  SOL_TCP, TCP_THIN_LINEAR_TIMEOUTS,  SVT_INT, NULL, 0, {0}},
-  {"TCP_LINGER2",  SOL_TCP, TCP_LINGER2,  SVT_INT, NULL, 0, {0}},
+  {"TCP_NODELAY",  IPPROTO_TCP, TCP_NODELAY,  SVT_BOOL, NULL, 0, {0}},
+#if !defined(WIN32)
+  {"TCP_CONGESTION", IPPROTO_TCP, TCP_CONGESTION, SVT_STR, NULL, 0, {0}},
+  {"TCP_CORK",     IPPROTO_TCP, TCP_CORK,  SVT_BOOL, NULL, 0, {0}},
+  {"TCP_KEEPCNT",  IPPROTO_TCP, TCP_KEEPCNT,  SVT_INT, NULL, 0, {0}},
+  {"TCP_KEEPIDLE",  IPPROTO_TCP, TCP_KEEPIDLE,  SVT_INT, NULL, 0, {0}},
+  {"TCP_KEEPINTVL",  IPPROTO_TCP, TCP_KEEPINTVL,  SVT_INT, NULL, 0, {0}},
+  {"TCP_SYNCNT",  IPPROTO_TCP, TCP_SYNCNT,  SVT_INT, NULL, 0, {0}},
+  {"TCP_WINDOW_CLAMP",  IPPROTO_TCP, TCP_WINDOW_CLAMP,  SVT_INT, NULL, 0, {0}},
+  {"TCP_QUICKACK",  IPPROTO_TCP, TCP_QUICKACK,  SVT_BOOL, NULL, 0, {0}},
+  {"TCP_DEFER_ACCEPT",  IPPROTO_TCP, TCP_DEFER_ACCEPT,  SVT_BOOL, NULL, 0, {0}},
+  {"TCP_MAXSEG",  IPPROTO_TCP, TCP_MAXSEG,  SVT_INT, NULL, 0, {0}},
+  {"TCP_THIN_DUPACK",  IPPROTO_TCP, TCP_THIN_DUPACK,  SVT_INT, NULL, 0, {0}},
+  {"TCP_THIN_LINEAR_TIMEOUTS",  IPPROTO_TCP, TCP_THIN_LINEAR_TIMEOUTS,  SVT_INT, NULL, 0, {0}},
+  {"TCP_LINGER2",  IPPROTO_TCP, TCP_LINGER2,  SVT_INT, NULL, 0, {0}},
   {"IP_MTU_DISCOVER", IPPROTO_IP, IP_MTU_DISCOVER, SVT_TOINT, conv_ip_mtu_discover, 0, {0}},
   {"SO_RCVBUF",    SOL_SOCKET,  SO_RCVBUF,    SVT_INT,  NULL, 0, {0}},
   {"SO_SNDLOWAT",  SOL_SOCKET,  SO_SNDLOWAT,  SVT_INT,  NULL, 0, {0}},
   {"SO_RCVLOWAT",  SOL_SOCKET,  SO_RCVLOWAT,  SVT_INT,  NULL, 0, {0}},
   {"SO_SNDTIMEO",  SOL_SOCKET,  SO_SNDTIMEO,  SVT_TIMEVAL, NULL, 0, {0}},
   {"SO_RCVTIMEO",  SOL_SOCKET,  SO_RCVTIMEO,  SVT_TIMEVAL, NULL, 0, {0}},
+#endif
   {NULL, 0, 0, 0, NULL, 0, {0}}
 };
 
@@ -88,6 +90,7 @@ void xsetsockopt(int s, int level, int optname,
 }
 
 
+#if !defined(WIN32)
 static int ignore_sigpipe(void)
 {
 	struct sigaction sa = { .sa_handler = SIG_IGN };
@@ -97,6 +100,7 @@ static int ignore_sigpipe(void)
 
 	return sigaction(SIGPIPE, &sa, NULL);
 }
+#endif
 
 
 static int parse_yesno(const char *optname, const char *optval)
@@ -239,7 +243,7 @@ double xgettimeofday(void)
 #if defined(WIN32)
 	struct _timeb tv;
 	_ftime(&tv);
-	return (double)tv.time + (double)tv.millitm * 1000;
+	return (double)tv.time + (double)tv.millitm / 1000;
 #else
 	struct timeval tv;
 	gettimeofday(&tv, NULL);
@@ -337,6 +341,9 @@ void init_network_stack(void)
 	if (err < 0)
 		err_msg_die(EXIT_FAILMISC, "failure in ignoring SIGPIPE signal");
 #endif
+
+	/* initialize the random generator */
+	srand((unsigned)time( NULL ));
 }
 
 void fini_network_stack(void)
