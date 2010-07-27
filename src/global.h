@@ -277,7 +277,7 @@ void fini_network_stack(void);
 int xgetopt_long(int ac, char * const av[], const char *, const struct option *, int *);
 int optarg_set_socketopts(const char *, struct socket_options *);
 void set_socketopts(int, int);
-long long byte_atoi(const char *);
+long long a_to_bit_s(const char *);
 int xatoi(const char *, int *);
 
 

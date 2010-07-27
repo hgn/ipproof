@@ -227,19 +227,23 @@ static int optarg_set_random_traffic(const char *option_arg, struct opts *opts)
 	if (!token)
 		goto out;
 
-	min = atoi(token);
+	ret = xatoi(token, &min);
+	if (ret != SUCCESS)
+		goto out;
 
 	token = strtok(NULL, delimiter);
 	if (!token)
 		goto out;
 
-	max = atoi(token);
+	ret = xatoi(token, &max);
+	if (ret != SUCCESS)
+		goto out;
 
 	token = strtok(NULL, delimiter);
 	if (!token)
 		goto out;
 
-	bw = byte_atoi(token);
+	bw = a_to_bit_s(token);
 	if (bw < 0)
 		goto out;
 
@@ -415,6 +419,7 @@ static int xgetopts(int ac, char **av, struct opts *opts)
 }
 
 
+/* calculate the average inter-frame delay in usec */
 static int calculate_random_traffic_delay(const struct opts *opts)
 {
 	int avg, delay;
@@ -427,14 +432,15 @@ static int calculate_random_traffic_delay(const struct opts *opts)
 	if (avg < (int)sizeof(struct packet))
 		avg = sizeof(struct packet);
 
-	avg *= 8;
+	/* calculation is done in byte */
+	delay = ((double)avg / (((double)opts->random_bandwidth) / 8)) * 1000000;
 
-	delay = (int)(avg * (((double)1000000 * 8) / ((double)opts->random_bandwidth)));
+	fprintf(stderr, "packet delay:%d [avg:%d   bw %d]\n", delay, avg, opts->random_bandwidth / 8);
 
-	if (delay < 0 || delay > 1000000) {
-		err_msg("delay to large: is %d and should between 0 and 1000000)"
+	if (delay < 0 || delay > 100000000) {
+		err_msg("delay to large: is %d and should between 0 and 100000000)"
 				". Adjusting to 1000000", delay);
-		delay = 1000000;
+		delay = 100000000;
 	}
 
 	return delay;
@@ -448,8 +454,7 @@ int main(int ac, char *av[])
 	char *data_rx;
 	struct packet *packet;
 	struct opts opts;
-	double start, end, last_packet_time, report_packet_time;
-	int delay = 0;
+	double start, end, last_packet_time;
 
 	init_network_stack();
 
@@ -492,22 +497,24 @@ int main(int ac, char *av[])
 
 		int adjust;
 
-		report_packet_time = start = xgettimeofday();
+		start = xgettimeofday();
 
-		adjust = delay_target + (last_packet_time - report_packet_time) * 1000000;
-		last_packet_time = start;
+		adjust = delay_target - ((start - last_packet_time) * 1000000);
 
-		if (adjust > 0 || delay > 0) {
-			delay += adjust;
-			opts.packet_interval = delay;
+		if (adjust > 0)
+			opts.packet_interval = adjust;
+
+		if (opts.packet_interval > 0) {
+			msg("delay transmission of next packet for %u us", opts.packet_interval);
+			xusleep(opts.packet_interval);
 		}
 
 		ret = tx_data(&opts, packet, socket_fd);
 		if (ret != SUCCESS)
 			break;
 
-		if (delay > 0)
-			xusleep(delay);
+		last_packet_time = xgettimeofday();
+
 
 		packet->sequence_no = packet->sequence_no + 1;
 
@@ -523,7 +530,7 @@ int main(int ac, char *av[])
 
 			end = xgettimeofday();
 
-			msg("   received %u byte payload (Application Layer RTT: %.6lf ms)",
+			msg("   received %u byte payload [application layer RTT: %.6lf ms]",
 					opts.rx_packet_size, end - start);
 
 
@@ -547,10 +554,6 @@ int main(int ac, char *av[])
 
 		}
 
-		if (opts.packet_interval > 0) {
-			msg("delay transmission of next packet for %u us", opts.packet_interval);
-			xusleep(opts.packet_interval);
-		}
 	}
 
 

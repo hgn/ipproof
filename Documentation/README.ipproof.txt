@@ -122,7 +122,7 @@ Start server and explicit bind to a IPv4 address. The server will generate
 output messages about the status of incoming packets.
 
 ------------
-$ ipproof-srv -4
+$ ./server -4
 ------------
 
 Start client and send each second a packet with size 1000 byte. This example
@@ -132,8 +132,19 @@ header are generated and added to the packet. If the packet is transported via E
 a Ethernet header (14 byte) are added too.
 
 ------------
-$ ipproof-client -4 -e -i 1 -s 1000 127.0.0.1
+$ ./client -4 -e -i 1 -s 1000 127.0.0.1
 ------------
+
+To generate random traffic pattern the following option can be selected
+
+------------
+$ ./server -6 -t udp
+------------
+
+------------
+$ ./client -6 -t udp -r 0 -R 530:1470:10kB -e 2a01:198:200:576::1
+------------
+
 
 
 Author

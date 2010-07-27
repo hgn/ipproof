@@ -820,8 +820,7 @@ static int convert_si_iec_prefixes(const char *str)
 	}
 }
 
-
-long long byte_atoi(const char *string)
+long long a_to_bit_s(const char *string)
 {
 	int ret, prefix_index;
 	double number;
