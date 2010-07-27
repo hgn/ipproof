@@ -820,6 +820,7 @@ static int convert_si_iec_prefixes(const char *str)
 	}
 }
 
+
 long long byte_atoi(const char *string)
 {
 	int ret, prefix_index;
@@ -847,6 +848,38 @@ long long byte_atoi(const char *string)
 		err_msg_die(EXIT_FAILINT, "programmed error");
 
 	return (long long) (number *= conversion_faktor_si_iec_to_bit[prefix_index]);
+}
+
+
+int xatoi(const char *str, int *ret)
+{
+	long sl;
+	char *end_ptr;
+
+	errno = 0;
+
+	sl = strtol(str, &end_ptr, 10);
+
+	if ((sl == LONG_MIN || sl == LONG_MAX) && errno != 0) {
+		err_sys("strtol error conversation error encountered: %s", str);
+		return FAILURE;
+	} else if (end_ptr == str) {
+		err_msg("error encountered during integer conversion: %s", str);
+		return FAILURE;
+	} else if (sl > INT_MAX) {
+		err_msg("integer too large");
+		return FAILURE;
+	} else if (sl < INT_MIN) {
+		err_msg("integer too small");
+		return FAILURE;
+	} else if ('\0' != *end_ptr) {
+		err_msg("extra characters on input line: %s", end_ptr);
+		return FAILURE;
+	}
+
+	*ret = sl;
+
+	return SUCCESS;
 }
 
 

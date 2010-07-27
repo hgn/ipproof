@@ -278,6 +278,7 @@ int xgetopt_long(int ac, char * const av[], const char *, const struct option *,
 int optarg_set_socketopts(const char *, struct socket_options *);
 void set_socketopts(int, int);
 long long byte_atoi(const char *);
+int xatoi(const char *, int *);
 
 
 
