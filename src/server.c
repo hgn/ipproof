@@ -137,12 +137,20 @@ static void process_cli_request_udp(int server_fd)
 	struct sockaddr_storage sa;
 	socklen_t sa_len = sizeof(sa);
 	char hbuf[NI_MAXHOST], sbuf[NI_MAXSERV];
-	static char packet[MAX_UDP_DATAGRAM];
+	static char buf[MAX_UDP_DATAGRAM];
+	struct packet *packet;
+	uint8_t sequence_no;
 
-	sret = recvfrom(server_fd, &packet, sizeof(packet), flags,
+	sret = recvfrom(server_fd, &buf, sizeof(buf), flags,
 			(struct sockaddr *)&sa, &sa_len);
 	if (sret < 0) {
 		err_sys("failure in recvfrom() - return code %d", sret);
+		return;
+	}
+
+	if (sret < (int)sizeof(*packet)) {
+		err_msg("packet to small (is %d byte, must %u byte",
+				sret, sizeof(*packet));
 		return;
 	}
 
@@ -151,8 +159,19 @@ static void process_cli_request_udp(int server_fd)
 	if (ret != 0)
 		err_msg_die(EXIT_FAILNET, "getnameinfo error: %s",  gai_strerror(ret));
 
-	msg("received %d bytes from %s:%s", sret, hbuf, sbuf);
 
+
+	packet = (struct packet *)buf;
+
+	/* some sanity checks */
+	if (packet->magic != MAGIC_COOKIE) {
+		msg("not a valid packet (cookie mismatch)");
+		return;
+	}
+
+	sequence_no = packet->sequence_no;
+
+	msg("received %d bytes from %s:%s [seq #: %d]", sret, hbuf, sbuf, sequence_no);
 	//sendto(sd,msg,n,flags,(struct sockaddr *)&cliAddr,cliLen);
 }
 
