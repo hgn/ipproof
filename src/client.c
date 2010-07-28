@@ -197,9 +197,9 @@ static int setup_random_traffic(struct opts *opts, int min, int max, long long b
 		return FAILURE;
 	}
 
-	if (bw <= 0 || (bw / 1000000) > MAX_BANDWIDTH) {
+	if (bw <= 0 || (bw / FACTOR_US_S) > MAX_BANDWIDTH) {
 		err_msg("bandwidth is unacceptable: %d bit/s (must between %d and %d)",
-				bw, 0, MAX_BANDWIDTH * 1000000);
+				bw, 0, MAX_BANDWIDTH * FACTOR_US_S);
 		return FAILURE;
 	}
 
@@ -433,7 +433,7 @@ static int calculate_random_traffic_delay(const struct opts *opts)
 		avg = sizeof(struct packet);
 
 	/* calculation is done in byte */
-	delay = ((double)avg / (((double)opts->random_bandwidth) / 8)) * 1000000;
+	delay = ((double)avg / (((double)opts->random_bandwidth) / 8)) * FACTOR_US_S;
 
 	fprintf(stderr, "packet delay:%d [avg:%d   bw %d]\n", delay, avg, opts->random_bandwidth / 8);
 
@@ -499,7 +499,7 @@ int main(int ac, char *av[])
 
 		start = xgettimeofday();
 
-		adjust = delay_target - ((start - last_packet_time) * 1000000);
+		adjust = delay_target - ((start - last_packet_time) * FACTOR_US_S);
 
 		if (adjust > 0)
 			opts.packet_interval = adjust;

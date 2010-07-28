@@ -73,7 +73,7 @@
 #endif
 
 #define PROGRAMNAME "ipproof"
-#define VERSIONSTRING "002"
+#define VERSIONSTRING "003"
 
 #define	DEFAULT_AI_SOCKTYPE SOCK_STREAM
 #define	DEFAULT_AI_PROTOCOL IPPROTO_TCP
@@ -169,6 +169,10 @@ static const int debug_enabled = 0;
 #endif
 
 #define streq(a, b) (!strcmp((a),(b)))
+
+#define FACTOR_MS_S 1000
+#define FACTOR_US_S 1000000
+#define	FACTOR_NS_S 1000000000
 
 /* conditonal because gcc does not support varargs.h */
 #if defined(WIN32)

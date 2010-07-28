@@ -247,7 +247,7 @@ double xgettimeofday(void)
 #else
 	struct timeval tv;
 	gettimeofday(&tv, NULL);
-	return (double)tv.tv_sec + (double)tv.tv_usec / 1000000;
+	return (double)tv.tv_sec + (double)tv.tv_usec / FACTOR_US_S;
 #endif
 }
 
