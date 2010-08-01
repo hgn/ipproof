@@ -88,6 +88,16 @@ typedef _W64 int ssize_t;
 # endif
 #endif
 
+#ifndef BITS_PER_LONG
+# define BITS_PER_LONG	__WORDSIZE
+#endif
+
+#define BIT(nr) (1UL << (nr))
+#define BIT_MASK(nr) (1UL << ((nr) % BITS_PER_LONG))
+#define BIT_WORD(nr) ((nr) / BITS_PER_LONG)
+#define BITS_PER_BYTE 8
+#define BITS_TO_LONGS(nr) DIV_ROUND_UP(nr, BITS_PER_BYTE * sizeof(long))
+
 /* some brand new linux tcp options */
 #ifndef TCP_THIN_LINEAR_TIMEOUTS
 # define TCP_THIN_LINEAR_TIMEOUTS 16
@@ -310,6 +320,34 @@ int xatoi(const char *, int *);
 #define	MAXERRMSG 1024
 
 
+static inline int test_bit(const volatile unsigned long *addr, int nr)
+{
+	return 1UL & (addr[BIT_WORD(nr)] >> (nr & (BITS_PER_LONG-1)));
+}
+
+static inline void change_bit(volatile unsigned long *addr, int nr)
+{
+	unsigned long mask = BIT_MASK(nr);
+	unsigned long *p = ((unsigned long *)addr) + BIT_WORD(nr);
+
+	*p ^= mask;
+}
+
+static inline void set_bit(volatile unsigned long *addr, int nr)
+{
+	unsigned long mask = BIT_MASK(nr);
+	unsigned long *p = ((unsigned long *)addr) + BIT_WORD(nr);
+
+	*p  |= mask;
+}
+
+static inline void clear_bit(volatile unsigned long *addr, int nr)
+{
+	unsigned long mask = BIT_MASK(nr);
+	unsigned long *p = ((unsigned long *)addr) + BIT_WORD(nr);
+
+	*p &= ~mask;
+}
 
 
 enum sockopt_val_types {
