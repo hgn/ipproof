@@ -141,6 +141,7 @@ typedef _W64 int ssize_t;
 struct packet {
 	uint8_t magic;
 	uint8_t sequence_no;
+	uint32_t flags;
 	uint32_t data_len_tx;
 	uint32_t data_len_rx;
 	uint16_t server_delay; /* delay and delay variance encoded in ms */

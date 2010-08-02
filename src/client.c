@@ -45,6 +45,9 @@ struct opts {
 	unsigned random_min;
 	unsigned random_max;
 	unsigned random_bandwidth; /* bit/s */
+
+	int zero_read_client;
+	int zero_read_server;
 };
 
 
@@ -171,6 +174,8 @@ static void print_usage(const char *me)
 			"   --check (-c)\t\t\t\tcheck payload for bit errors\n"
 			"   --setsockopt (-S) <option:arg1:arg2:...>\tset the socketoption \"option\" with argument arg1, arg2, ...\n"
 			"   --random (-R) <min:max:bw>\t\t\tgenerator to generate randomly generated traffic pattern\n"
+			"   --zero-read-client (-z)\t\tclient dont read any data from the socket buffer\n"
+			"   --zero-read-server (-Z)\t\tserver dont read any data from the socket buffer\n"
 			"   --verbose (-v)\t\t\t\tverbose output to STDOUT\n", me);
 }
 
@@ -299,9 +304,11 @@ static int xgetopts(int ac, char **av, struct opts *opts)
 			{"transport",    1, 0, 't'},
 			{"setsockopt",   1, 0, 'S'},
 			{"random",       1, 0, 'R'},
+			{"zero-read-client", 0, 0, 'z'},
+			{"zero-read-server", 0, 0, 'Z'},
 			{0, 0, 0, 0}
 		};
-		c = xgetopt_long(ac, av, "t:i:s:t:e:p:n:d:D:r:S:R:vhc46",
+		c = xgetopt_long(ac, av, "t:i:s:t:e:p:n:d:D:r:S:R:vhc46zZ",
 				long_options, &option_index);
 		if (c == -1)
 			break;
@@ -376,6 +383,12 @@ static int xgetopts(int ac, char **av, struct opts *opts)
 			case 'h':
 				print_usage(av[0]);
 				exit(EXIT_SUCCESS);
+				break;
+			case 'z':
+				opts->zero_read_client = 1;
+				break;
+			case 'Z':
+				opts->zero_read_server = 1;
 				break;
 			case 'R':
 				ret = optarg_set_random_traffic(optarg, opts);
@@ -519,7 +532,7 @@ int main(int ac, char *av[])
 		packet->sequence_no = packet->sequence_no + 1;
 
 		/* wait and read data from server */
-		if (opts.rx_packet_size) {
+		if (opts.rx_packet_size && !opts.zero_read_client) {
 			fprintf(stderr, "block in read (waiting for %u bytes)\n",
 					opts.rx_packet_size);
 			sret = read_len(socket_fd, data_rx, opts.rx_packet_size);
