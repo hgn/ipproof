@@ -460,6 +460,19 @@ static int calculate_random_traffic_delay(const struct opts *opts)
 }
 
 
+static void enable_packet_flags(const struct opts *opts, struct packet *packet)
+{
+	uint32_t flags;
+
+	if (opts->zero_read_server)
+		flags |= FLAG_SERVER_ZERO_READ;
+
+	/* to keep the 32 bit field open to reuse e.g. remaining
+	 * 16 bits -> htonl() */
+	packet->flags = htonl(flags);
+}
+
+
 int main(int ac, char *av[])
 {
 	int socket_fd, ret, delay_target = 0;
@@ -489,6 +502,8 @@ int main(int ac, char *av[])
 	packet->data_len_rx      = htonl(opts.rx_packet_size);
 	packet->server_delay     = htons(opts.server_delay);
 	packet->server_delay_var = htons(opts.server_delay_var);
+
+	enable_packet_flags(&opts, packet);
 
 	memset(packet->data, PAYLOAD_BYTE_PATTERN, opts.tx_packet_size);
 

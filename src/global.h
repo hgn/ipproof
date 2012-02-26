@@ -155,6 +155,8 @@ struct packet {
 __attribute__((__packed__));
 #endif
 
+#define	FLAG_SERVER_ZERO_READ (1UL << 0)
+
 #define MAGIC_COOKIE 0x23
 
 #define PAYLOAD_BYTE_PATTERN 0xff
@@ -323,7 +325,7 @@ int xatoi(const char *, int *);
 
 static inline int test_bit(const volatile unsigned long *addr, int nr)
 {
-	return 1UL & (addr[BIT_WORD(nr)] >> (nr & (BITS_PER_LONG-1)));
+	return 1UL & (addr[BIT_WORD(nr)] >> (nr & (BITS_PER_LONG - 1)));
 }
 
 static inline void change_bit(volatile unsigned long *addr, int nr)

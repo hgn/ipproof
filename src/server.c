@@ -42,12 +42,21 @@ struct opts {
 };
 
 
+static void read_packet_flags(uint32_t flags)
+{
+	if (flags & FLAG_SERVER_ZERO_READ)
+		fprintf(stderr, "zero read flag enabled\n");
+	else
+		fprintf(stderr, "zero read flag disabled\n");
+}
+
+
 static int rx_tx_data_tcp(int fd, struct conn_data *conn_data)
 {
 	int ret;
 	char *data_rx, *data_tx;
 	struct packet packet;
-	uint32_t data_len_tx, data_len_rx;
+	uint32_t data_len_tx, data_len_rx, flags;
 	uint16_t server_delay, server_delay_var;
 	uint8_t sequence_no;
 
@@ -70,9 +79,12 @@ static int rx_tx_data_tcp(int fd, struct conn_data *conn_data)
 
 	data_len_tx      = ntohl(packet.data_len_tx);
 	data_len_rx      = ntohl(packet.data_len_rx);
+	flags            = ntohl(packet.flags);
 	sequence_no      = packet.sequence_no;
 	server_delay     = ntohs(packet.server_delay);
 	server_delay_var = ntohs(packet.server_delay_var);
+
+	read_packet_flags(flags);
 
 	if (!conn_data->sequence_initialized) {
 		conn_data->sequence_no = sequence_no;
