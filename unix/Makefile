@@ -1,4 +1,4 @@
-TARGETS = client server
+TARGETS = ipproof-client ipproof-server
 
 CC := gcc
 CFLAGS :=-pipe -g -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -I../src/
@@ -27,11 +27,15 @@ clean:
 %: %.c Makefile global.h
 	$(CC) $(CFLAGS) $(CWARNINGS) -o $@ $<
 
-client: ../src/client.c ../src/shared.c
-	$(CC) $(CFLAGS) $(CWARNINGS) -o client ../src/client.c ../src/shared.c
+ipproof-client: ../src/client.c ../src/shared.c
+	$(CC) $(CFLAGS) $(CWARNINGS) -o ipproof-client ../src/client.c ../src/shared.c
 
-server: ../src/server.c ../src/shared.c
-	$(CC) $(CFLAGS) $(CWARNINGS) -o server ../src/server.c ../src/shared.c
+ipproof-server: ../src/server.c ../src/shared.c
+	$(CC) $(CFLAGS) $(CWARNINGS) -o ipproof-server ../src/server.c ../src/shared.c
+
+install: ipproof-server ipproof-client
+	install ipproof-server /usr/bin
+	install ipproof-server /usr/bin
 
 cscope:
 	cscope -R -b
