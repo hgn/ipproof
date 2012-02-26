@@ -35,7 +35,7 @@ ipproof-server: ../src/server.c ../src/shared.c
 
 install: ipproof-server ipproof-client
 	install ipproof-server /usr/bin
-	install ipproof-server /usr/bin
+	install ipproof-client /usr/bin
 
 cscope:
 	cscope -R -b
