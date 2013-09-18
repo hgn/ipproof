@@ -12,6 +12,8 @@ CWARNINGS := -Wall -Wextra -pipe -Wwrite-strings -Wsign-compare \
 					-Wold-style-definition  -Wdeclaration-after-statement \
 					-fstack-protector
 
+CLIBS=-lm
+
 CFLAGS += -ggdb3 # -Werror
 
 .SUFFIXES:
@@ -31,7 +33,7 @@ ipproof-client: ../src/client.c ../src/shared.c
 	$(CC) $(CFLAGS) $(CWARNINGS) -o ipproof-client ../src/client.c ../src/shared.c
 
 ipproof-server: ../src/server.c ../src/shared.c
-	$(CC) $(CFLAGS) $(CWARNINGS) -o ipproof-server ../src/server.c ../src/shared.c
+	$(CC) $(CFLAGS) $(CWARNINGS) $(CLIBS) -o ipproof-server ../src/server.c ../src/shared.c
 
 install: ipproof-server ipproof-client
 	install ipproof-server /usr/bin
