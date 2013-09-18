@@ -73,7 +73,7 @@
 #endif
 
 #define PROGRAMNAME "ipproof"
-#define VERSIONSTRING "003"
+#define VERSIONSTRING "007"
 
 #define	DEFAULT_AI_SOCKTYPE SOCK_STREAM
 #define	DEFAULT_AI_PROTOCOL IPPROTO_TCP
@@ -133,6 +133,67 @@ typedef _W64 int ssize_t;
 # define IP_PMTUDISC_PROBE 3
 #endif
 
+typedef uint16_t le16;
+typedef uint16_t be16;
+typedef uint32_t le32;
+typedef uint32_t be32;
+
+#define PREAMBEL_COOKIE 0xA0
+#define PREAMBEL_COOKIE_MASK 0xE0
+#define PREAMBEL_COOKIE_IS_VALID(x) ((x & PREAMBEL_COOKIE_MASK) == PREAMBEL_COOKIE)
+
+#define PREAMBEL_EXTENDED_HEADER 0x10
+#define PREAMBEL_EXTENDED_HEADER_IS(x) (x & PREAMBEL_EXTENDED_HEADER)
+
+#define PREAMBEL_FLOW_END 0x8
+#define PREAMBEL_FLOW_END_IS(x) (x & PREAMBEL_FLOW_END)
+
+#if defined(WIN32)
+# pragma pack(push,1)
+#endif
+struct header_minimal {
+        uint8_t preambel;
+        uint8_t flow_id;
+        be16 sequence_number;
+        be32 data_length_tx;
+        le16 data_length_rx;
+        char data[0];
+}
+#if defined(WIN32)
+;
+# pragma pack(pop)
+#else
+__attribute__((__packed__));
+#endif
+
+
+#if defined(WIN32)
+# pragma pack(push,1)
+#endif
+struct header_extended {
+        uint8_t preambel;
+        uint8_t reserved;
+        be16 flow_id;
+        be32 sequence_number;
+        be32 data_length_tx;
+        be32 data_length_rx;
+        be16 server_delay;
+        be16 server_delay_var;
+        char data[0];
+}
+#if defined(WIN32)
+;
+# pragma pack(pop)
+#else
+__attribute__((__packed__));
+#endif
+
+
+enum {
+        HEADER_FORMAT_MINIMAL,
+        HEADER_FORMAT_EXTENDED
+};
+
 
 /*  a horrible workaround */
 #if defined(WIN32)
@@ -141,9 +202,8 @@ typedef _W64 int ssize_t;
 struct packet {
 	uint8_t magic;
 	uint8_t sequence_no;
-	uint32_t flags;
-	uint32_t data_len_tx;
-	uint32_t data_len_rx;
+	uint16_t data_len_tx;
+	uint16_t data_len_rx;
 	uint16_t server_delay; /* delay and delay variance encoded in ms */
 	uint16_t server_delay_var;
 	char data[0];
@@ -155,19 +215,45 @@ struct packet {
 __attribute__((__packed__));
 #endif
 
-#define	FLAG_SERVER_ZERO_READ (1UL << 0)
+/*  extended header definition, extended header available
+ *  if EXTENDED_PATTERN is set in packet->magic. If extended
+ *  header is active then the original data_len_tx and
+ *  data_len_rx fields are ignored */
+#if defined(WIN32)
+# pragma pack(push,1)
+#endif
+struct extended_header {
+        uint32_t data_len_tx;
+        uint32_t data_len_rx;
+        uint32_t sequence_no;
+        uint32_t id;
+}
+#if defined(WIN32)
+;
+# pragma pack(pop)
+#else
+__attribute__((__packed__));
+#endif
 
-#define MAGIC_COOKIE 0x23
+/* 101010 */
+#define MAGIC_COOKIE 0x2A
+#define MAGIC_COOKIE_MASK 0xFE
 
-#define PAYLOAD_BYTE_PATTERN 0xff
+/* if active then the extended mode is activated and
+ * MUST be used */
+#define EXTENDED_COOKIE_PATTERN 0x1
+#define EXTENDED_COOKIE_PATTERN_MASK 0x1
 
-/* large enough to support 16128 jumbo ethernet frames - supported by intel
- * e1000 adapters */
-#define	MAX_UDP_DATAGRAM 16384
+#define PAYLOAD_BYTE_PATTERN 'X'
+
+/* We support the maximum IP layer header size here, we *have*
+ * already application layer fragmentation by using -n <n> option.
+ */
+#define	MAX_UDP_DATAGRAM 65535
 
 #define DEFAULT_PORT "5001"
 
-#define MAX_LINE 1000
+#define MAX_LINE 1024
 
 /* 7.19.1 in C99 but anyway: 8K or 16K on most
  *  * machines - st_blksize via fstat(2) can[TM] be superior */
@@ -187,7 +273,11 @@ static const int debug_enabled = 0;
 #define FACTOR_US_S 1000000
 #define	FACTOR_NS_S 1000000000
 
-/* conditonal because gcc does not support varargs.h */
+#define VERBOSE_NORMAL(verbose) (verbose && verbose > 0)
+#define VERBOSE_EXTENSIVE(verbose) (verbose && verbose > 1)
+#define VERBOSE_ULTRA(verbose) (verbose && verbose > 2)
+
+/* conditional because gcc does not support varargs.h */
 #if defined(WIN32)
 
 #  define likely(x)   x
@@ -272,8 +362,15 @@ struct socket_options {
 	};
 };
 
+enum {
+        VMSG_DEBUG,
+        VMSG_INFO,
+        VMSG_INFO2,
+        VMSG_ERROR
+};
 
 /* shared.c */
+//void vmsg(int level, const char *, ...);
 void msg(const char *, ...);
 void x_err_ret(const char *, int, const char *, ...);
 void x_err_sys(const char *, int, const char *, ...);
@@ -323,34 +420,6 @@ int xatoi(const char *, int *);
 #define	MAXERRMSG 1024
 
 
-static inline int test_bit(const volatile unsigned long *addr, int nr)
-{
-	return 1UL & (addr[BIT_WORD(nr)] >> (nr & (BITS_PER_LONG - 1)));
-}
-
-static inline void change_bit(volatile unsigned long *addr, int nr)
-{
-	unsigned long mask = BIT_MASK(nr);
-	unsigned long *p = ((unsigned long *)addr) + BIT_WORD(nr);
-
-	*p ^= mask;
-}
-
-static inline void set_bit(volatile unsigned long *addr, int nr)
-{
-	unsigned long mask = BIT_MASK(nr);
-	unsigned long *p = ((unsigned long *)addr) + BIT_WORD(nr);
-
-	*p  |= mask;
-}
-
-static inline void clear_bit(volatile unsigned long *addr, int nr)
-{
-	unsigned long mask = BIT_MASK(nr);
-	unsigned long *p = ((unsigned long *)addr) + BIT_WORD(nr);
-
-	*p &= ~mask;
-}
 
 
 enum sockopt_val_types {
@@ -360,6 +429,20 @@ enum sockopt_val_types {
 	SVT_TIMEVAL,
 	SVT_STR
 };
+
+
+static int xrand(void) {
+        return rand() << 16 | rand() & 0xff;
+}
+
+
+/* returns random between [min, max) */
+static int rand_range(int min, int max)
+{
+        return (int)((xrand() * 1.0) / (RAND_MAX + 1) * (max - min) + min);
+}
+
+
 
 #endif /* GLOBAL_H */
 

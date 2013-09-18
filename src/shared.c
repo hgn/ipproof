@@ -1,5 +1,5 @@
 /*
-** Copyright (C) 2009,2010 - Hagen Paul Pfeifer <hagen@jauu.net>
+** Copyright (C) 2009-2013 - Hagen Paul Pfeifer <hagen@jauu.net>
 **
 ** This program is free software; you can redistribute it and/or modify
 ** it under the terms of the GNU General Public License as published by
@@ -241,9 +241,19 @@ void xgetaddrinfo(const char *node, const char *service,
 double xgettimeofday(void)
 {
 #if defined(WIN32)
-	struct _timeb tv;
-	_ftime(&tv);
-	return (double)tv.time + (double)tv.millitm / 1000;
+# define DELTA_EPOCH_IN_MICROSECS  11644473600000000ULL
+	FILETIME ft;
+	unsigned __int64 tmpres = 0;
+
+	GetSystemTimeAsFileTime(&ft);
+
+	tmpres |= ft.dwHighDateTime;
+	tmpres <<= 32;
+	tmpres |= ft.dwLowDateTime;
+	tmpres /= 10;
+	tmpres -= DELTA_EPOCH_IN_MICROSECS;
+
+	return (double)tmpres / 1000000.0;
 #else
 	struct timeval tv;
 	gettimeofday(&tv, NULL);
@@ -301,13 +311,13 @@ ssize_t read_len(int fd, const void *buf, size_t len)
 				continue;
 
 			real_errno = errno;
-			err_msg("Could not read %u bytes: %s", len, strerror(errno));
+			err_msg("Could not read %u bytes: %s", len - read_actual, strerror(errno));
 			errno = real_errno;
 			break;
 		}
 
 		if (cur == 0) {
-			msg("read return 0");
+			msg("read return 0, read_actual: %u", read_actual);
 			return 0;
 		}
 
@@ -343,7 +353,7 @@ void init_network_stack(void)
 #endif
 
 	/* initialize the random generator */
-	srand((unsigned)time( NULL ));
+	srand((unsigned)time(NULL));
 }
 
 void fini_network_stack(void)
@@ -545,10 +555,10 @@ unsigned calc_hamming_dist(const char *data, size_t len)
 	size_t i;
 	unsigned v, c;
 
+        c = 0;
+
 	for (i = 0; i < len; i++) {
-
 		v = data[i];
-
 		for (c = 0; v; c++)
 			v &= v - 1;
 	}
@@ -557,10 +567,11 @@ unsigned calc_hamming_dist(const char *data, size_t len)
 }
 
 
-/* set TCP_NODELAY opption on socket
-** return the previous value (0, 1) or
-** -1 if a error occur
-*/
+/*
+ * Set TCP_NODELAY opption on socket
+ * return the previous value (0, 1) or
+ * -1 if a error occur
+ */
 int set_nodelay(int fd, int flag)
 {
 	int ret = 0; socklen_t ret_size;
@@ -574,17 +585,19 @@ int set_nodelay(int fd, int flag)
 	return ret;
 }
 
+
 void msg(const char *format, ...)
 {
 	va_list ap;
 
-	fprintf(stderr, "[%06lf] ", xgettimeofday());
+	fprintf(stdout, "[%06lf] ", xgettimeofday());
 
 	va_start(ap, format);
-	vfprintf(stderr, format, ap);
+	vfprintf(stdout, format, ap);
 	va_end(ap);
 
-	fputs("\n", stderr);
+	fputs("\n", stdout);
+        fflush(stdout);
 }
 
 
@@ -826,12 +839,12 @@ long long a_to_bit_s(const char *string)
 	double number;
 	char buf[16];
 
-	ret = sscanf( string, "%lf%15s", &number, buf);
+	ret = sscanf(string, "%lf%15s", &number, buf);
 	if (ret != 2) {
-		msg("bandwidth argument inaccurate. Required is a number, directly"
-				"followed by a suffix: GMKgmk (where the lower letters are SI units (10^n),"
-					"the uppercase letters represent the IEC binary suffixes 2^n) - all units"
-				"in bits, not bytes");
+		msg("bandwidth argument inaccurate. Required is a number, directly "
+			"followed by a suffix: GMKgmk (where the lower letters are SI units (10^n), "
+			"the uppercase letters represent the IEC binary suffixes 2^n) - followed by bit. "
+			"e.g. -R 500:1000:10kbit");
 		return -1;
 	}
 
