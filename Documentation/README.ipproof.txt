@@ -3,25 +3,29 @@ ipproof(1)
 
 NAME
 ----
-ipproof-cli (client) - Client application of the ip proof application
-ipproof-srv (server) - Server application of the ip proof application
+
+ipproof-client - Client application of the ip proof application
+ipproof-server - Server application of the ip proof application
 
 
 SYNOPSIS
 --------
 
-'ipproof-cli' [-v] [-h] [-b] [-4] [-6] [-t <protocol>] [-c <count>] [-i <interval>] [-p <port>]
-              [-e <hostname>] [-s <size>] [-c <enable | disable>]
+'ipproof-client' [-v] [-h] [-b] [-4] [-6] [-t <protocol>] [-i <interval-time>] [-p <port>]
+              [-n <iterations>] [-d <server-delay>] [-D <server-delay-variation>]
+              [-c ] [-S <socketoption>] [-R <min:max:bw>] [-s <tx-packet-size>]
+              [-r <rx-packet-size>] [-c <enable | disable>]
+              -e <hostname>
 
-'ipproof-srv' [-v] [-h] [-4] [-6]
+'ipproof-server' [-v] [-h] [-4] [-6]
 
 
 
 DESCRIPTION
 -----------
-The server component (ipproof-src) is the passive component of the IP proof test application.
+The server component (server) is the passive component of the IP proof test application.
 The server component must be start before the client is started. The server will bind to the
-the assigned port (default: 6666) and wait for incoming packets. Each packet has a own protocol
+the assigned port (default: 5001) and wait for incoming packets. Each packet has a own protocol
 header. In this header additional information are encoded. For example if the server shall piggy
 back the information to the client. If yes this will emulate a typical echo client server
 application similar to RFC 862.
@@ -40,10 +44,6 @@ The following options are client side options.
 --help::
           Print help screen and exit.
 
--b::
---broadcast::
-          Allow to send to a IPv4 broadcast address.
-
 -4::
 --ipv4::
           Enforce the use of IPv4. Default depends on the host operating system
@@ -59,16 +59,16 @@ The following options are client side options.
           Selects the transport protocol where <protocol> can be UDP or TCP.
           Default is UDP.
 
--c <count>::
---count <count>::
-          Stop after <count> packets. Default is infinity: the client never
-          stop the packet generation.
+-c::
+--check::
+          Check the integrity of received data and terminate programm if
+          check detect a failure. Default is to check the integrity of data
+          packets.
 
--i <interval>::
---interval <interval>::
-          Wait interval seconds between sending each packet. The default
-          is not to wait which itself generates at much packets then the host
-          operating system is feasible.
+-i <interval-time>::
+--interval <interval-time>::
+          Wait interval in microseconds (usec) between two packets. The default
+          is 1000000 us (1 sec). Option -R will overwrite this option.
 
 -p <port>::
 --port <port>::
@@ -77,20 +77,46 @@ The following options are client side options.
 -e <hostname>::
 --destination <hostname>::
           Destination address of the server. This can be a numeric IPv4/IPv6 (127.0.0.1, ::1)
-          address or a hostname (e.g. localhost). The hostname is a required argument.
+          address or a hostname (e.g. localhost). Hostnames may require a dynamic DNS resolver
+          and a functioning and configured DNS system. The hostname is a required argument.
 
 -s <size>::
---size <size>::
-          Packet size in bytes of the payload. This excludes the Network layer and Transport
+--txpacketsize <size>::
+          Packet size in bytes of the payload send to the server. This excludes the Network layer and Transport
           layer protocol overhead. Network layer protocol overhead includes the standard IPv4
           or IPv6 header (including potential IPv4 options or IPv6 extension header) and the
           transport protocol header overhead (UDP or TCP).
 
--c <enable | disable>::
---check <enable | disable>::
-          Enable or disable the verification check of the payload at the server side. Default
-          is to check the integrity of the data.
+-t <size>::
+--rxpacketsize <size>::
+          Packet size in bytes of the payload send from server to client. This excludes the
+          Network layer and Transport layer protocol overhead. Network layer protocol overhead
+          includes the standard IPv4 or IPv6 header (including potential IPv4 options or IPv6
+          extension header) and the transport protocol header overhead (UDP or TCP).
 
+-d <usec>::
+--server-delay <msec>::
+          Server delay in milliseconds between two successive packets send
+          from the server to the client. Default is to wait 0 second.
+
+-D <usec>::
+--server-delay-variance <msec>::
+          Variacnce in milliseconds between two seccussice packets. This
+          options can be used to introduce an artificial behavior. E.g.
+          emulate WEB server processing delay et cetera.
+
+-S <arg:opt1:opt2>::
+--setsockopt <arg:opt1:opt2>::
+          Set the socket option for the socket like TCP_QUICKACK, TCP_QUICKACK, and
+          so on. The specification and which options are availabe differs from plattform to
+          plattform.  Via "-S help" all valid socket options can be displayed!
+
+-R <min:max:bw>::
+--random <min:max:bw>::
+          The random option was introduced to a) specify a fix bandwidth (min
+          and max can be identical) and b) to stress test a particular traffic
+          pattern. Min and max are bytes where the bandwidth argument must be
+          suffixed (e.g. kB, kbyte, Mbyte, ....). E.g. "530:1470:10kB"
 
 SERVER OPTIONS
 --------------
@@ -156,9 +182,10 @@ EMail: hagen@jauu.net
 
 Licence
 -------
-ipprov is licensed under the GPLv2
+ipproof is licensed under the GPLv2
 
 
 Documentation
 --------------
 Documentation by Hagen Paul Pfeifer <hagen@jauu.net>.
+
