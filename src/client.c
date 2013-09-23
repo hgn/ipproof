@@ -19,6 +19,10 @@
 
 #include "global.h"
 
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <netinet/in.h>
+
 #define DEFAULT_PACKET_SIZE 500
 #define DEFAULT_PACKET_INTERVAL 1000000  /* eq 1 second */
 
@@ -27,10 +31,13 @@ extern struct socket_options socket_options[];
 enum {
         PAYLOAD_PATTERN_STATIC,
         PAYLOAD_PATTERN_RANDOM,
-        PAYLOAD_PATTERN_RANDOM_ASCII
+        PAYLOAD_PATTERN_RANDOM_ASCII,
+        PAYLOAD_PATTERN_RANDOM_REDUCED
 };
 
 #define DEFAULT_PAYLOAD_PATTERN PAYLOAD_PATTERN_STATIC
+
+#define DSCP_UNMODIFIED UINT_MAX
 
 struct opts {
 	char *hostname;
@@ -48,13 +55,15 @@ struct opts {
 	int ai_socktype;
 	int ai_protocol;
 
-        int payload_pattern;
+	int payload_pattern;
 
 	/* variables to model random packet distribution */
 	int random_enabled;
 	unsigned random_min;
 	unsigned random_max;
 	unsigned random_bandwidth; /* bit/s */
+
+	unsigned int dscp;
 };
 
 
@@ -67,8 +76,8 @@ static int is_random_traffic_enabled(const struct opts *opts)
 static int tx_data(struct opts *o, int header_format, char *packet, int fd, int counter)
 {
 	ssize_t ret, size;
-        struct header_extended *he;
-        struct header_minimal *hm;
+	struct header_extended *he;
+	struct header_minimal *hm;
 
 	size = o->tx_packet_size;
 
@@ -144,6 +153,52 @@ static int bind_client_socket(struct opts *opts, int fd)
         return -1;
 }
 
+static const char *rand_val_str(int val)
+{
+	switch (val) {
+	case PAYLOAD_PATTERN_STATIC:
+		return "static";
+	case PAYLOAD_PATTERN_RANDOM:
+		return "random";
+	case PAYLOAD_PATTERN_RANDOM_ASCII:
+		return "random ASCII";
+	case PAYLOAD_PATTERN_RANDOM_REDUCED:
+		return "random reduced";
+	default:
+		return "unknown";
+	}
+}
+
+
+static void init_dscp(struct opts *opts, int fd)
+{
+	int ret, val;
+
+	if (opts->dscp == DSCP_UNMODIFIED) {
+		/* "DSCP not set, leave it unmodified" */
+		return;
+
+	}
+
+	if (opts->verbose_level)
+		msg("set DSCP value to %d", opts->dscp);
+
+#if defined(WIN32)
+	err_msg("DSCP option currently not supported for Windows");
+#else
+	/* with linux you can set the whole Diffserv/ECN byte,
+	 * so we just shift out ECN range */
+	val = opts->dscp << 2;
+
+	ret = setsockopt(fd, IPPROTO_IP, IP_TOS,  &val, sizeof(val));
+	if (ret != 0) {
+		err_msg("Failed to set DSCP to %d", opts->dscp);
+	}
+#endif
+
+}
+
+
 static int init_cli_socket(struct opts *opts)
 {
 	int ret, fd = -1;
@@ -210,6 +265,8 @@ static int init_cli_socket(struct opts *opts)
 
 	freeaddrinfo(hostres);
 
+	init_dscp(opts, fd);
+
 	pr_debug("open a active TCP socket on port %s", opts->port);
 
 	return fd;
@@ -241,7 +298,7 @@ static void print_usage(const char *me)
 			"   --setsockopt (-S) <option:arg1:arg2:...>\n\tset the socket option \"option\" with argument arg1, arg2, ...\n"
                         "   --random (-R) <min (byte):max (byte):bw (bit/s)>\n\tgenerator to generate randomly generated traffic pattern\n"
 			"      \t(e.g. -R 100:500:5000kbit)\n"
-                        "   --payload-pattern <static | ascii-random | random>\n\tconfigures the packet payload pattern\n"
+                        "   --payload-pattern <static | ascii-random | random | random-reduced>\n\tconfigures the packet payload pattern\n"
                         "   --bind (b) <address>\n\tbind socket to local address\n"
 			"   --verbose (-v)\n\tverbose output to STDOUT\n"
 			"\n"
@@ -355,8 +412,7 @@ static void print_opts(struct opts *opts)
 	msg("  Txpacketsize:\t\t%d",     opts->tx_packet_size);
 	msg("  Rxpacketsize:\t\t%d",     opts->rx_packet_size);
 	msg("  Port:\t\t\t%s",           opts->port);
-	msg("  Payload-pattern:\t%s", opts->payload_pattern == 0 ? "static" :
-								  (opts->payload_pattern == 1 ? "random" : "random-ascii"));
+	msg("  Payload-pattern:\t%s",    rand_val_str(opts->payload_pattern));
 }
 
 
@@ -382,6 +438,7 @@ static int xgetopts(int ac, char **av, struct opts *opts)
 	opts->random_enabled   = 0;
 	opts->bind_addr        = NULL;
 	opts->payload_pattern  = DEFAULT_PAYLOAD_PATTERN;
+	opts->dscp             = DSCP_UNMODIFIED;
 
 	while (1) {
 		static struct option long_options[] = {
@@ -402,12 +459,14 @@ static int xgetopts(int ac, char **av, struct opts *opts)
 			{"transport",       1, 0, 't'},
 			{"setsockopt",      1, 0, 'S'},
 			{"random",          1, 0, 'R'},
-            {"bind",            1, 0, 'b'},
-            {"payload-pattern", 1, 0, 'P'},
+			{"bind",            1, 0, 'b'},
+			{"payload-pattern", 1, 0, 'P'},
+			{"dscp",            1, 0, 'C'},
 			{0, 0, 0, 0}
 		};
-                c = xgetopt_long(ac, av, "t:i:s:t:e:p:P:n:d:D:r:S:R:b:vhc46V",
-				long_options, &option_index);
+
+		c = xgetopt_long(ac, av, "t:i:s:t:e:p:P:n:d:D:r:S:R:b:C:vhc46V",
+				 long_options, &option_index);
 		if (c == -1)
 			break;
 
@@ -492,6 +551,8 @@ static int xgetopts(int ac, char **av, struct opts *opts)
 					opts->payload_pattern  = PAYLOAD_PATTERN_RANDOM;
 				} else if (!strcasecmp("ascii-random", optarg)) {
 					opts->payload_pattern  = PAYLOAD_PATTERN_RANDOM_ASCII;
+				} else if (!strcasecmp("random-reduced", optarg)) {
+					opts->payload_pattern  = PAYLOAD_PATTERN_RANDOM_REDUCED;
 				} else {
 					err_msg("payload pattern %s not supported!", optarg);
 					exit(EXIT_FAILOPT);
@@ -508,6 +569,12 @@ static int xgetopts(int ac, char **av, struct opts *opts)
 					exit(EXIT_FAILOPT);
 				}
 				break;
+			case 'C':
+				opts->dscp = atoi(optarg);
+				if (opts->dscp > 63) {
+					err_msg("DSCP value out of range: must be 0 - 63");
+					exit(EXIT_FAILOPT);
+				}
 			case '?':
 				break;
 
@@ -623,9 +690,11 @@ static BOOL WINAPI console_ctrl_handler(DWORD signum)
 #else
 static void signal_callback_handler(int signum)
 {
-		measurement_end = xgettimeofday();
-		print_throughput();
-		exit(0);
+	(void)signum;
+
+	measurement_end = xgettimeofday();
+	print_throughput();
+	exit(0);
 }
 #endif
 
@@ -659,6 +728,12 @@ static void init_packet_payload(struct opts *opts, int header_format, char *pack
 	case PAYLOAD_PATTERN_RANDOM:
 		for (i = 0; i < opts->tx_packet_size - header_size; i++)
 			blob[i] = (char)(rand());
+		break;
+	case PAYLOAD_PATTERN_RANDOM_REDUCED:
+		for (i = 0; i < opts->tx_packet_size - header_size; i++) {
+			blob[i] = (char)(rand());
+			blob[i] = (blob[i] & 0xef);
+		}
 		break;
 	case PAYLOAD_PATTERN_RANDOM_ASCII:
 		for (i = 0; i < opts->tx_packet_size - header_size; i++)
@@ -731,7 +806,7 @@ static char *construct_minimal_packet(struct opts *opts)
 }
 
 
-static print_header_summary(int header_format, char *packet)
+static void print_header_summary(int header_format, char *packet)
 {
         struct header_minimal *hm;
         struct header_extended *he;
@@ -743,6 +818,9 @@ static print_header_summary(int header_format, char *packet)
         case HEADER_FORMAT_EXTENDED:
                 he = (struct header_extended *)packet;
                 break;
+	default:
+		assert(0);
+		break;
         }
 }
 
@@ -781,7 +859,7 @@ int main(int ac, char **av)
         }
 
         init_packet_payload(&opts, header_format, blob);
-        
+
 
 	//packet = xzalloc(opts.tx_packet_size);
 

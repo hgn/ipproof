@@ -895,4 +895,16 @@ int xatoi(const char *str, int *ret)
 }
 
 
+int xrand(void)
+{
+        return (rand() << 16) | (rand() & 0xff);
+}
+
+
+/* returns random between [min, max) */int rand_range(int min, int max)
+{
+        return (int)((xrand() * 1.0) / (RAND_MAX + 1) * (max - min) + min);
+}
+
+
 /* vim: set tw=78 ts=4 sw=4 sts=4 ff=unix noet: */

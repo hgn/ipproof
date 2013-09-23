@@ -431,20 +431,12 @@ enum sockopt_val_types {
 };
 
 
-static int xrand(void) {
-        return rand() << 16 | rand() & 0xff;
-}
+int xrand(void);
 
 
 /* returns random between [min, max) */
-static int rand_range(int min, int max)
-{
-        return (int)((xrand() * 1.0) / (RAND_MAX + 1) * (max - min) + min);
-}
+int rand_range(int min, int max);
 
 
 
 #endif /* GLOBAL_H */
-
-
-/* vim: set tw=78 ts=4 sw=4 sts=4 ff=unix noet: */
