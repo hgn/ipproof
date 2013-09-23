@@ -692,11 +692,12 @@ static char *construct_extended_packet(struct opts *opts)
         packet = xzalloc(opts->tx_packet_size);
         header_extended = (struct header_extended *)packet;
 
-        header_extended->preambel =PREAMBEL_COOKIE;
+        header_extended->preambel = PREAMBEL_COOKIE;
         header_extended->preambel = header_extended->preambel | PREAMBEL_EXTENDED_HEADER;
 
         header_extended->flow_id = (be16)xrand();
         header_extended->sequence_number = 0;
+
         header_extended->data_length_tx = htonl(opts->tx_packet_size);
         header_extended->data_length_rx = htonl(opts->rx_packet_size);
 
@@ -738,11 +739,9 @@ static print_header_summary(int header_format, char *packet)
         switch (header_format) {
         case HEADER_FORMAT_MINIMAL:
                 hm = (struct header_minimal *)packet;
-                msg("flow-id: %d", hm->flow_id);
                 break;
         case HEADER_FORMAT_EXTENDED:
                 he = (struct header_extended *)packet;
-                msg("flow-id: %d", ntohs(he->flow_id));
                 break;
         }
 }
