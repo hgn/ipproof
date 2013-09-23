@@ -170,7 +170,7 @@ static const char *rand_val_str(int val)
 }
 
 
-static void init_dscp(struct opts *opts, int fd)
+static void init_dscp(int family, struct opts *opts, int fd)
 {
 	int ret, val;
 
@@ -186,13 +186,27 @@ static void init_dscp(struct opts *opts, int fd)
 #if defined(WIN32)
 	err_msg("DSCP option currently not supported for Windows");
 #else
-	/* with linux you can set the whole Diffserv/ECN byte,
-	 * so we just shift out ECN range */
-	val = opts->dscp << 2;
-
-	ret = setsockopt(fd, IPPROTO_IP, IP_TOS,  &val, sizeof(val));
-	if (ret != 0) {
-		err_msg("Failed to set DSCP to %d", opts->dscp);
+	switch (family) {
+	case AF_INET:
+		/* with linux you can set the whole Diffserv/ECN byte,
+		 * so we just shift out ECN range */
+		val = opts->dscp << 2;
+		ret = setsockopt(fd, IPPROTO_IP, IP_TOS,  &val, sizeof(val));
+		if (ret != 0) {
+			err_msg("Failed to set DSCP to %d", opts->dscp);
+		}
+	break;
+	case AF_INET6:
+		/* with linux you can set the whole Diffserv/ECN byte,
+		 * so we just shift out ECN range */
+		val = opts->dscp << 2;
+		ret = setsockopt(fd, IPPROTO_IPV6, IPV6_TCLASS, &val, sizeof(val));
+		if (ret != 0) {
+			err_msg("Failed to set DSCP to %d", opts->dscp);
+		}
+	break;
+	default:
+	break;
 	}
 #endif
 
@@ -263,9 +277,9 @@ static int init_cli_socket(struct opts *opts)
 				"Don't found a suitable TCP socket to connect to the client"
 				", giving up");
 
-	freeaddrinfo(hostres);
+	init_dscp(addrtmp->ai_family, opts, fd);
 
-	init_dscp(opts, fd);
+	freeaddrinfo(hostres);
 
 	pr_debug("open a active TCP socket on port %s", opts->port);
 
