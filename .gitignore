@@ -1,0 +1,9 @@
+unix/ipproof-client
+unix/ipproof-server
+win/client/Debug/
+win/client/client.*
+win/debug/
+win/server/Debug/
+win/server/server.vcproj.*
+win/win.ncb
+
