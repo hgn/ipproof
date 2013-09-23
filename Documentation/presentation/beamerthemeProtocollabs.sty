@@ -1,0 +1,143 @@
+% \LaTeX beamer theme with ZBH style layout
+% this is modeled after the PowerPoint template provided by the MIN people
+% author: Sascha Steinbiss <steinbiss@zbh.uni-hamburg.de>
+% Feb 6th, 2010
+
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{beamerthemeProtocollabs}[2010/02/06 ZBH beamer theme]
+\RequirePackage{ifthen}
+\RequirePackage[scaled=.85]{helvet}
+
+\newcommand{\headertext}{
+  ~\\
+}
+
+% Some handy commands
+\newcommand{\bi}{\begin{itemize}}
+\newcommand{\ei}{\end{itemize}}
+\newcommand{\be}{\begin{enumerate}}
+\newcommand{\ee}{\end{enumerate}}
+\newcommand{\bd}{\begin{description}}
+\newcommand{\ed}{\end{description}}
+\newcommand{\bv}{\begin{verbatim}}
+\newcommand{\ev}{\end{verbatim}}
+
+\newcommand{\addresstext}{
+  ProtocolLabs\\
+  Parkstra\ss e 6\\
+  80339 M\"unchen, Germany\\[2mm]
+  http://www.protocollabs.com\\
+  hagen.pfeifer@protocollabs.com
+}
+
+\newboolean{@usegerman}
+\setboolean{@usegerman}{false}
+
+\DeclareOption{german}{
+  \renewcommand{\headertext}{
+    Zentrum f\"ur\\ Bioinformatik\\
+  }
+  \renewcommand{\addresstext}{
+    Universit\"at Hamburg\\
+    Zentrum f\"ur Bioinformatik\\
+    Bundesstra\ss e 43\\
+    20146 Hamburg\\[2mm]
+    http://www.zbh.uni-hamburg.de\\
+    info@zbh.uni-hamburg.de
+  }
+  \setboolean{@usegerman}{true}
+}
+\ProcessOptions
+
+\ifthenelse{\boolean{@usegerman}}{
+  \RequirePackage[english,ngerman]{babel}
+  \selectlanguage{ngerman}
+}{
+  \RequirePackage[ngerman,english]{babel}
+  \selectlanguage{english}
+}
+
+\mode<presentation>
+
+\setbeamerfont{author}{size=\large}
+\setbeamerfont{date}{size=\large}
+\setbeamerfont{example text}{series=\bfseries}
+\setbeamerfont{section}{series=\bfseries}
+\setbeamercolor{structure}{fg=red}
+\setbeamercolor{title}{fg=black}
+\setbeamerfont{title}{series=\bfseries}
+
+% disable navigation symbols (who uses these anyway?)
+\setbeamertemplate{navigation symbols}{}
+
+% frame
+\setbeamercolor{frametitle}{fg=white}
+\setbeamerfont{frametitle}{series=\mdseries,size=\large}
+\setbeamerfont{framesubtitle}{series=\mdseries,size=\large}
+\setbeamertemplate{frametitle}
+{
+  \ifbeamer@plainframe
+  \else
+    \textbf{\insertframetitle}
+    \vspace{.25cm}
+  \fi
+}
+
+% headline
+\setbeamercolor{headline}{fg=white}
+\setbeamertemplate{headline}{
+  \ifbeamer@plainframe
+  \else
+    \vspace{8mm}
+    \leavevmode\tiny%
+    \hspace*{9.3cm}
+    \begin{minipage}[b]{2cm}
+      \flushright
+      \headertext
+    \end{minipage}
+    \normalsize
+  \fi
+}
+
+\setbeamertemplate{title page}{
+  \vspace{5mm}
+  \textbf{\LARGE{\inserttitle}}
+  \vfill
+  \begin{columns}
+  \begin{column}{.45\textwidth}
+    \textbf{\insertauthor}\\[3mm]
+    \scriptsize
+    \addresstext
+  \end{column}
+  \begin{column}{.45\textwidth}
+		\pgfimage[width=\textwidth]{figures/png/sky}
+  \end{column}
+  \end{columns}
+  \normalsize
+}
+
+% footer with name, date and page numbers
+\setbeamercolor{footline}{fg=gray}
+\setbeamertemplate{footline}{
+  \ifbeamer@plainframe
+  \else
+    \leavevmode\tiny%
+    \hspace*{3.3cm}%
+    \makebox[4cm][l]{\insertauthor}%
+    \makebox[4cm][l]{\insertdate}%
+      \hfill\insertframenumber/\inserttotalframenumber\hspace{5mm}%
+    \vspace{3mm}%
+  \fi
+}
+
+% use ZBH slide layout template as background image
+\setbeamertemplate{background} {
+  \ifbeamer@plainframe
+  \else
+    \includegraphics[width=\paperwidth,height=\paperheight]{figures/png/logo}
+  \fi
+}
+
+\mode
+<all>
+  

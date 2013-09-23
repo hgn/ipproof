@@ -1,0 +1,208 @@
+\documentclass[xcolor=pdftex,dvipsnames,table]{beamer}
+
+\hypersetup{%
+	pdfpagemode=FullScreen,%
+	pdfstartpage=1,%
+	pdfauthor={Hagen Paul Pfeifer},%
+}
+
+\usepackage{colortbl}
+\usepackage{fancyvrb}
+\usepackage{xcolor}
+\usepackage{algorithm2e}
+
+\usetheme{Protocollabs}
+
+\useinnertheme{circles}
+\usecolortheme{seahorse}
+\usecolortheme{rose}
+
+
+\definecolor{plblue}{RGB}{51,102,153}
+\setbeamercolor{structure}{fg=plblue}
+
+\author{Hagen Paul Pfeifer}
+\title{IPProof --- A Generic Network Protocol Packet Generator and Behavior Modeler}
+\date{\today}
+
+\begin{document}
+
+%%%%%%%%%%%%%%%%%%%
+\begin{frame}
+\titlepage
+\end{frame}
+
+
+
+
+%%%%%%%%%%%%%%%%%%%
+\begin{frame}
+\frametitle{}
+\textsf{There is no one-line answer to the question ''How fast can TCP go?'' -- RFC 1323}
+\end{frame}
+
+
+
+
+%%%%%%%%%%%%%%%%%%%
+\begin{frame}
+\frametitle{Introduction}
+\begin{itemize}
+	\item Core features of ipproof (20\%)
+	\item How to utilize and possible application (80\%)
+\end{itemize}
+\end{frame}
+
+
+%%%%%%%%%%%%%%%%%%%
+\begin{frame}
+\frametitle{Supported Protocols}
+\begin{itemize}
+	\item Network Layer
+	\bi
+		\item IPv4
+		\item IPv6
+	\ei
+	\item Transport Layer
+	\bi
+		\item TCP
+		\item UDP
+		\item UDP-Lite (patch available)
+	\ei
+	\item Ipproof can be used to model application level behavior
+\end{itemize}
+\end{frame}
+
+
+
+%%%%%%%%%%%%%%%%%%%
+\begin{frame}
+\frametitle{Additional Properties}
+\begin{itemize}
+	\item ipprov provides no analysis functionality
+	\item python, ruby, shell scripts in association with tcpdump or pcap traces are required to perform sophisticated analysis,
+	ipprov form a vanilla packet generator - not more
+	\item Visualization via gnuplot, matplotlib, CairoPlot, octave, R, \dots
+\end{itemize}
+\end{frame}
+
+
+%%%%%%%%%%%%%%%%%%%
+\begin{frame}
+\frametitle{Other Features}
+\begin{itemize}
+	\item Validation of packet data integrity to check for bit errors (via hamming distance, only payload - no network, transport
+	layer header validation)
+	\item Windows port (Visual Studio Project file)
+	\bi
+		\item No UDP-Lite support and other disadvantages due to antiquated network stack
+	\ei
+\end{itemize}
+\end{frame}
+
+
+
+%%%%%%%%%%%%%%%%%%%
+\begin{frame}
+\frametitle{Fundamental Characteristic}
+\begin{itemize}
+	\item Bulk Data Emulation
+	\item Interactive Emulation
+	\item Somewhere in between
+	\item Bulk Data
+	\bi
+		\item unidirectional communication characteristic
+		\item Sender transmit data
+		\item maximum MSS
+		\item TCP congestion mechanism are operative (CWND, SSTRESH, ...)
+		\item Receiver is limited to acknowledge data
+	\ei
+	\item Interactive Data
+	\bi
+		\item bidirectiol communication characteristic
+		\item Sender transmit data, receiver "echo's" the origina data
+		\item Small amount of data, a few bytes per packet -  far from link capacity
+		\item Nagle algorithm disabled
+		\item larger delay between successive packets (user types slower then link delay)
+	\ei
+	\item Somewhere in Between
+	\bi
+		\item Send n byte every m microseconds, echoed back after p microseconds q bytes or nothing is echoed
+		\item Send 1GB nonrecurring without echo
+		\item Send 10MB nonrecurring with a 10kb echo packet (e.g. form some kind of application level acknowledgement)
+		\item Send 50 byte data, recuring every minute via UDP to a multicast address
+	\ei
+\end{itemize}
+\end{frame}
+
+
+%%%%%%%%%%%%%%%%%%%
+\begin{frame}
+\frametitle{Packet Interarrival Modeling}
+\begin{itemize}
+	\item Network protocol behavior can be divided into two categories concerning the packet interarrival:
+	\bi
+		\item Constant arrival time, barely deviations from the packet generation process (e.g. streaming application)
+		\item Variable packet generation
+	\ei
+	\item Last but not least: often the packet arrival differs based on ``environment noise'':
+	\bi
+		\item Runtime environments with Garbage Collections
+		\item Operating system process scheduler latency (e.g. high priority tasks versus low priority tasks)
+		\item Egress queuing characteristics (e.g. concurrent data streams, rate limiting egress queueing policy)
+		\item Middlebox queueing
+		\item Network adapter noise (interrupt moderation, \dots)
+		\item Ingress queue
+		\item Socket buffer characteristics
+		\item Operating system scheduling latency
+		\item \dots
+	\ei
+\end{itemize}
+\end{frame}
+
+
+
+%%%%%%%%%%%%%%%%%%%
+\begin{frame}
+\frametitle{Receive Buffer Exhausting}
+\begin{itemize}
+	\item Behaves like an application which forget to read() from the socket (e.g. slow receiver, low priority of receiver
+	\item Test to trigger the behavior of zero window probing mechanism of the operating system
+\end{itemize}
+\end{frame}
+
+
+%%%%%%%%%%%%%%%%%%%
+\begin{frame}
+\frametitle{Traffic Models}
+\begin{itemize}
+	\item Long-lived FTP Traffic
+	\item Short-lived Web Traffic
+	\item Streaming Video Traffic
+	\item Interactive Voice Traffic
+\end{itemize}
+\end{frame}
+
+
+%%%%%%%%%%%%%%%%%%%
+\begin{frame}
+\frametitle{Modelling Interactive Traffic}
+\begin{itemize}
+	\item Definition: Interactive TCP Traffic
+	\bi
+		\item TCP/IP illustrated: The protocols, by W. Richard Stevens and Gary R. Wright
+		\item IETF Draft "An NS2 TCP Evaluation Tool" provides some metrics about interactive
+		traffic\footnote{http://tools.ietf.org/html/draft-irtf-tmrg-ns2-tcp-tool-00}
+		\item Examples: SSH, Telnet, IRC, XMPP (Jabber)
+	\ei
+\end{itemize}
+\end{frame}
+
+
+
+
+\end{document}
+
+
+
+% vim600: fdm=marker tw=130 sw=4 ts=4 sts=4 ff=unix noet:
