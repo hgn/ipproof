@@ -19,10 +19,6 @@
 
 #include "global.h"
 
-#include <sys/socket.h>
-#include <sys/types.h>
-#include <netinet/in.h>
-
 #define DEFAULT_PACKET_SIZE 500
 #define DEFAULT_PACKET_INTERVAL 1000000  /* eq 1 second */
 
@@ -314,11 +310,14 @@ static void print_usage(const char *me)
 			"      \t(e.g. -R 100:500:5000kbit)\n"
                         "   --payload-pattern <static | ascii-random | random | random-reduced>\n\tconfigures the packet payload pattern\n"
                         "   --bind (b) <address>\n\tbind socket to local address\n"
+                        "   --dscp (C) <value>\n\tset DSCP (Diffserv) value (currently only supported for Linux)\n"
 			"   --verbose (-v)\n\tverbose output to STDOUT\n"
 			"\n"
 			"Examples:\n"
 			"   ipproof-client -4 -vv -e example.com -r 0 -t udp -R 1000:1000:5000kbit\n"
-			"   IPv4/UDP to example.com, no data back, send 1000byte packet with 5000kbit/s\n"
+			"   IPv4/UDP to example.com, no data back, send 1000byte packet with 5000kbit/s\n\n"
+                        "   ipproof-client -4 -e example.com -t tcp -s 10000 -r 10 -n 1\n"
+                        "   IPv4/TCP to example.com, 10byte back, send 10000 byte, one iteration\n"
 			"\n", me);
 }
 
@@ -417,14 +416,17 @@ out:
 
 static void print_opts(struct opts *opts)
 {
+        if (opts->verbose_level < 1)
+                return;
+
 	msg("ipproof options:");
 	msg("  Network protocol:\t\t%s", opts->af_family==2 ? "IPv4" : "IPv6");
-	msg("  Verbose:\t\t%d",          opts->verbose_level);
-	msg("  Hostname:\t\t%s",         opts->hostname);
-	msg("  Interval:\t\t%d",         opts->packet_interval);
+	msg("  Verbose:\t\t\t%d",          opts->verbose_level);
+	msg("  Destination:\t\t\t%s",         opts->hostname);
+	msg("  Interval:\t\t\t%d",         opts->packet_interval);
 	msg("  Iterations:\t\t%d",       opts->iterations);
-	msg("  Txpacketsize:\t\t%d",     opts->tx_packet_size);
-	msg("  Rxpacketsize:\t\t%d",     opts->rx_packet_size);
+	msg("  TX packetsize:\t\t%d",     opts->tx_packet_size);
+	msg("  RX packetsize:\t\t%d",     opts->rx_packet_size);
 	msg("  Port:\t\t\t%s",           opts->port);
 	msg("  Payload-pattern:\t%s",    rand_val_str(opts->payload_pattern));
 }
@@ -856,9 +858,9 @@ int main(int ac, char **av)
 	if (ret != SUCCESS)
 		err_msg_die(EXIT_FAILOPT, "failure in commandline options");
 
-	print_opts(&opts);
-
 	msg(PROGRAMNAME " - " VERSIONSTRING);
+
+        print_opts(&opts);
 
         if (opts.verbose_level > 2)
                 printout_level = 1;
