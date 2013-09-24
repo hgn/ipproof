@@ -183,6 +183,21 @@ class IPProofGui(Frame):
         b2.grid(row=1, column=3)
         b3.grid(row=1, column=4)
 
+    def dscp_fields(self):
+        self.config["dscp"] = StringVar()
+        self.config["dscp"].set("")
+
+        frame = Frame(self,width=500)
+        frame.pack(expand=YES, fill=BOTH)
+
+        label  = Label(frame, text="Diffserv (DSCP, 0 - 63):                  ")
+        entry  = Entry(frame, textvariable=self.config["dscp"], width=3)
+        label2 = Label(frame, text="    Note: option has no effect under Microsoft Windows!", fg="red")
+
+        label.grid(row=1, column=1)
+        entry.grid(row=1, column=2)
+        label2.grid(row=1, column=3)
+
 
     def tx_byte_fields(self):
         self.config["tx-payload"] = StringVar()
@@ -254,6 +269,7 @@ class IPProofGui(Frame):
         b1 = Radiobutton(frame, text="static (0xff)", variable=self.config["payload-pattern"], value="static")
         b2 = Radiobutton(frame, text="random", variable=self.config["payload-pattern"], value="random")
         b3 = Radiobutton(frame, text="ascii-random", variable=self.config["payload-pattern"], value="ascii-random")
+        b4 = Radiobutton(frame, text="random-reduced", variable=self.config["payload-pattern"], value="random-reduced")
 
         label = Label(frame, text="Payload Pattern:                           ")
 
@@ -261,6 +277,7 @@ class IPProofGui(Frame):
         b1.grid(row=1, column=2)
         b2.grid(row=1, column=3)
         b3.grid(row=1, column=4)
+        b4.grid(row=1, column=5)
 
 
     def server_delay_fields(self):
@@ -281,7 +298,7 @@ class IPProofGui(Frame):
         self.config["server-delay-var"] = StringVar()
         self.config["server-delay-var"].set("0")
 
-        frame = Frame(self,width=500)
+        frame = Frame(self, width=500)
         frame.pack(expand=YES, fill=BOTH)
 
         label = Label(frame, text="Server Reply Delay Variation [ms]: ")
@@ -403,6 +420,7 @@ class IPProofGui(Frame):
         self.ip_addr_fields()
         self.bind_fields()
         self.enfore_network_protocol_fields()
+        self.dscp_fields()
 
 
         # transport protocol
