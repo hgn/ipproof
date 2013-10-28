@@ -15,17 +15,19 @@ from subprocess import call
 
 UDP = dpkt.udp.UDP
 
-# script
-#./go.py show  ./sending-host.pcap ./receiving-host.pcap
-#./go.py --tx-ether-src b8:ac:6f:43:04:4f show ./sending-host.pcap
-#./go.py --tx-ether-src 00:1b:21:29:a4:00 show ./foo.pcap
+# script tests:
+#./ipproof-loss-gap-analyser.py show  ./sending-host.pcap ./receiving-host.pcap
+#./ipproof-loss-gap-analyser.py --tx-ether-src b8:ac:6f:43:04:4f show ./sending-host.pcap
+#./ipproof-loss-gap-analyser.py --tx-ether-src 00:1b:21:29:a4:00 show ./foo.pcap
 #
-#./go.py loss  ./sending-host.pcap ./receiving-host.pcap
-#./go.py --tx-ether-src b8:ac:6f:43:04:4f loss ./sending-host.pcap
-#
-#./go.py interframe-gap --stdio  ./sending-host.pcap ./receiving-host.pcap
-#./go.py --tx-ether-src 00:1b:21:29:a4:00 interframe-gap --stdio ./foo.pcap
-#./go.py interframe-gap --graph ./lol  ./sending-host.pcap ./receiving-host.pcap
+#./ipproof-loss-gap-analyser.py loss  ./sending-host.pcap ./receiving-host.pcap
+#./ipproof-loss-gap-analyser.py --tx-ether-src b8:ac:6f:43:04:4f loss ./sending-host.pcap
+#./ipproof-loss-gap-analyser.py --tx-ether-src 00:1b:21:29:a4:00 loss ./foo.pcap
+# ./ipproof-loss-gap-analyser.py --tx-ether-src 00:90:b8:1c:10:62 loss ./foo.pcap
+
+#./ipproof-loss-gap-analyser.py interframe-gap --stdio  ./sending-host.pcap ./receiving-host.pcap
+#./ipproof-loss-gap-analyser.py --tx-ether-src 00:1b:21:29:a4:00 interframe-gap --stdio ./foo.pcap
+#./ipproof-loss-gap-analyser.py interframe-gap --graph ./lol  ./sending-host.pcap ./receiving-host.pcap
 
 
 class SkipProcessStepException(Exception): pass
@@ -131,7 +133,7 @@ PNG_OBJ = $(patsubst %.gpi,%.png,  $(GNUPLOT_FILES))
 PDF_OBJ = $(patsubst %.gpi,%.pdf,  $(GNUPLOT_FILES))
 
 all: $(PDF_OBJ)
-png: $(PNG_OBJ)./go.py interframe-gap --stdio  ./sending-host.pcap ./receiving-host.pcap
+png: $(PNG_OBJ)
 
 %.eps: %.gpi *.data
 	@ echo "compillation of "$<
@@ -395,10 +397,10 @@ class PcapIpproofFrameAnalyser:
     def run_loss(self):
         if True:
             for fid in self.flow_db.db.keys():
-                sys.stdout.write("Analyzed Flow: %d\n\n" % (fid) )
+                sys.stdout.write("\n\nAnalyzed Flow: %d\n" % (fid) )
 
                 sys.stdout.write("Loss - NoLoss - Characteristic (0: no-loss, 1: loss):\n")
-                sys.stdout.write("-----------------------------------------------------\n")
+                #sys.stdout.write("-----------------------------------------------------\n")
                 num_of_symbols=0
                 loss_string = ""
                 for p in self.flow_db.db[fid]["data"]:      
@@ -440,6 +442,7 @@ class PcapIpproofFrameAnalyser:
     
     def get_loss_model(self, loss_string):
         dat=loss_string
+        print "P_loss: %.3f %%" % (100.0*loss_string.count('1')/len(loss_string),)
         err_num = 0
         p_num=len(dat)
         in_burst = 0
@@ -474,9 +477,9 @@ class PcapIpproofFrameAnalyser:
             p31 = 0
 
         sys.stdout.write("\n4 State Markov Chain Transition Probability:\n")
-        sys.stdout.write("--------------------------------------------\n")
-        sys.stdout.write(" p13 = %.3lf\n" % (100 * p13) )
-        sys.stdout.write(" p31 = %.3lf\n" % (100 * p31) )
+        #sys.stdout.write("--------------------------------------------\n")
+        sys.stdout.write("p13 = %.3lf %%\n" % (100 * p13) )
+        sys.stdout.write("p31 = %.3lf %%\n" % (100 * p31) )
 
 
 if __name__ == "__main__":
