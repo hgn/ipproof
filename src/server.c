@@ -270,7 +270,8 @@ static int rx_tx_data_tcp(int fd, struct conn_data *conn_data, struct opts *opts
                 free(buf_tx);
         free(buf_rx);
 
-        return SUCCESS;
+		xclose(fd);
+        return FAILURE;
 
 err_tx:
         free(buf_tx);
