@@ -96,7 +96,7 @@ static void flow_id_stat_print(struct opts *opts, double now)
 
         if (is_format_json(opts->format)) {
                 fprintf(stdout, "{ \"instance\": \"server\", "
-                        "\"tx-data\": %lu, \"rx-data\": %lu, "
+                        "\"tx-data\": %llu, \"rx-data\": %llu, "
                         "\"tx-time\": %.5lf, \"rx-time\": %.5lf, "
                         "\"tx-goodput\": %lu, \"rx-goodput\": %lu, "
                         "\"goodput-unit\": \"bit/s\", "
@@ -136,7 +136,7 @@ void flow_id_stat_update_received(struct opts *opts, uint16_t flow_id, unsigned 
         flow_id_stat.last_packet = now;
 
 		if (VERBOSE_EXTENSIVE(opts->verbose_level))
-			msg("data received: %lu byte", flow_id_stat.bytes_received);
+			msg("data received: %llu byte", flow_id_stat.bytes_received);
 }
 
 
