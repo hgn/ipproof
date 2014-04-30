@@ -4,20 +4,20 @@ ipproof(1)
 NAME
 ----
 
-ipproof-client - Client application of the ip proof application
-ipproof-server - Server application of the ip proof application
+client - Client application of the ip proof application
+server - Server application of the ip proof application
 
 
 SYNOPSIS
 --------
 
-'ipproof-client' [-v] [-h] [-b] [-4] [-6] [-t <protocol>] [-i <interval-time>] [-p <port>]
+'client' [-v] [-h] [-b] [-4] [-6] [-t <protocol>] [-i <interval-time>] [-p <port>]
               [-n <iterations>] [-d <server-delay>] [-D <server-delay-variation>]
               [-c ] [-S <socketoption>] [-R <min:max:bw>] [-s <tx-packet-size>]
               [-r <rx-packet-size>] [-c <enable | disable>]
               -e <hostname>
 
-'ipproof-server' [-v] [-h] [-4] [-6]
+'server' [-v] [-h] [-4] [-6]
 
 
 

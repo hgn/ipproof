@@ -44,6 +44,7 @@ struct opts {
 	int af_family;
 	int ai_socktype;
 	int ai_protocol;
+        int format;
 };
 
 
@@ -55,6 +56,100 @@ struct packet_data {
         unsigned int server_delay;
         unsigned int server_delay_var;
 };
+
+struct flow_id_stat {
+        uint16_t flow_id;
+        unsigned long long bytes_received;
+        unsigned long long bytes_transmitted;
+        double first_packet;
+        double last_packet;
+};
+
+static struct flow_id_stat flow_id_stat;
+
+#define FLOW_ID_UNUSED 0xFFFF
+
+static void flow_id_stat_table_init(struct opts *opts)
+{
+        (void) opts;
+
+        flow_id_stat.flow_id = FLOW_ID_UNUSED;
+        flow_id_stat.bytes_received = 0;
+}
+
+
+static void flow_id_stat_print(struct opts *opts, double now)
+{
+        unsigned long tx_throughput, rx_throughput;
+        double delta_time = flow_id_stat.last_packet - flow_id_stat.first_packet;
+
+        if (flow_id_stat.bytes_transmitted)
+                tx_throughput = (unsigned long)((flow_id_stat.bytes_transmitted * 8) / delta_time);
+        else
+                tx_throughput = 0;
+
+        if (flow_id_stat.bytes_received)
+                rx_throughput = (unsigned long)((flow_id_stat.bytes_received * 8) / delta_time);
+        else
+                rx_throughput = 0;
+
+
+        if (is_format_json(opts->format)) {
+                fprintf(stdout, "{ \"instance\": \"server\", "
+                        "\"tx-data\": %lu, \"rx-data\": %lu, "
+                        "\"tx-time\": %.5lf, \"rx-time\": %.5lf, "
+                        "\"tx-goodput\": %lu, \"rx-goodput\": %lu, "
+                        "\"goodput-unit\": \"bit/s\", "
+                        "\"flow-id\": %u "
+                        "}\n",
+                        flow_id_stat.bytes_transmitted, flow_id_stat.bytes_received,
+                        delta_time, delta_time,
+                        tx_throughput, rx_throughput, flow_id_stat.flow_id);
+        }
+}
+
+
+/* this functions is fastpath - try to keep this function
+ * as fast as possible */
+void flow_id_stat_update_received(struct opts *opts, uint16_t flow_id, unsigned long bytes, double now)
+{
+        /* new incoming flow, print last flow and update statistics */
+        if (flow_id != flow_id_stat.flow_id) {
+                if (flow_id_stat.flow_id != FLOW_ID_UNUSED) {
+                        /*
+                         * print the current statistic if a already existing
+                         * flow was present - dont print data if this is the first
+                         * new flow where no data is available
+                         */
+                        flow_id_stat_print(opts, now);
+                }
+                flow_id_stat.bytes_received    = bytes;
+                flow_id_stat.bytes_transmitted = 0;
+                flow_id_stat.first_packet = flow_id_stat.last_packet = now;
+                flow_id_stat.flow_id = flow_id;
+				if (VERBOSE_EXTENSIVE(opts->verbose_level))
+					msg("new connection");
+                return;
+        }
+
+        flow_id_stat.bytes_received += bytes;
+        flow_id_stat.last_packet = now;
+
+		if (VERBOSE_EXTENSIVE(opts->verbose_level))
+			msg("data received: %lu byte", flow_id_stat.bytes_received);
+}
+
+
+static void flow_id_stat_update_transmitted(struct opts *opts, uint16_t flow_id,
+                                            unsigned long bytes, double now)
+{
+        /* Check that the actual flow */
+        assert(flow_id == flow_id_stat.flow_id);
+
+        flow_id_stat.bytes_transmitted += bytes;
+        flow_id_stat.last_packet = now;
+}
+
 
 
 /* Returns 0 for success or negative error code for error.
@@ -145,11 +240,11 @@ static void server_sleep(struct opts *opts, struct packet_data *packet_data)
         if (packet_data->server_delay_var) {
                 sleep_time += rand_range(-((int)packet_data->server_delay_var), (int)packet_data->server_delay_var);
         }
-        
+
         if (VERBOSE_EXTENSIVE(opts->verbose_level))
                 msg("    sleep for %u ms [delay %d, delay-var: %d]",
                     sleep_time, packet_data->server_delay, abs(packet_data->server_delay - sleep_time));
-        
+
         msleep(sleep_time);
 }
 
@@ -221,7 +316,6 @@ static int rx_tx_data_tcp(int fd, struct conn_data *conn_data, struct opts *opts
 
         conn_data->raw_bytes_read += (unsigned long)header_size;
 
-
         check_sequence_number(&packet_data, conn_data);
 
         packet_data.data_len_tx -= (unsigned int)header_size;
@@ -239,6 +333,9 @@ static int rx_tx_data_tcp(int fd, struct conn_data *conn_data, struct opts *opts
         }
 
         conn_data->raw_bytes_read += ret;
+        flow_id_stat_update_received(opts, packet_data.flow_id,
+                                     (unsigned long)header_size + ret,
+                                     xgettimeofday());
 
         /*
          * it the client enforce artificial server delay and/or server
@@ -249,6 +346,8 @@ static int rx_tx_data_tcp(int fd, struct conn_data *conn_data, struct opts *opts
 
         if (packet_data.data_len_rx > 0) {
 
+                /* FIXME: xzalloc SHOULD be replaced by xrealloc() to
+                 * get rid of malloc/free loops */
                 buf_tx = xzalloc(packet_data.data_len_rx);
                 memset(buf_tx, PAYLOAD_BYTE_PATTERN, packet_data.data_len_rx);
 
@@ -263,6 +362,9 @@ static int rx_tx_data_tcp(int fd, struct conn_data *conn_data, struct opts *opts
                 }
 
                 conn_data->raw_bytes_send += packet_data.data_len_rx;
+                flow_id_stat_update_transmitted(opts, packet_data.flow_id,
+                                                (unsigned long)packet_data.data_len_rx,
+                                                xgettimeofday());
         }
 
 
@@ -270,8 +372,7 @@ static int rx_tx_data_tcp(int fd, struct conn_data *conn_data, struct opts *opts
                 free(buf_tx);
         free(buf_rx);
 
-		xclose(fd);
-        return FAILURE;
+        return SUCCESS;
 
 err_tx:
         free(buf_tx);
@@ -286,12 +387,15 @@ static double start, now, last_output;
 static int unitilized;
 static unsigned long no_run;
 static unsigned bytes_received;
+static unsigned expected_sequence_no;
+static unsigned packet_loss_cnt;
 
-static void reset_state(double now)
+static void reset_state(double time_now)
 {
         bytes_received = 0;
         no_run         = 0;
-        last_output = start = now;
+        last_output = start = time_now;
+        packet_loss_cnt = 0;
 }
 
 
@@ -303,13 +407,8 @@ static void process_cli_request_udp(struct opts *opts, int server_fd)
 	char *data_rx;
 	char hbuf[NI_MAXHOST], sbuf[NI_MAXSERV];
 	static char buf[MAX_UDP_DATAGRAM];
-        struct header_minimal *hm;
-        struct header_extended *he;
-	unsigned int sequence_no;
-	uint32_t data_len_tx, data_len_rx;
-	uint16_t server_delay, server_delay_var;
         int header_format, flow_end;
-        int flow_id;
+        struct packet_data packet_data;
 
 	sret = recvfrom(server_fd, (char *)&buf, sizeof(buf), flags,
 			(struct sockaddr *)&sa, &sa_len);
@@ -320,9 +419,9 @@ static void process_cli_request_udp(struct opts *opts, int server_fd)
 
 	now = xgettimeofday();
 
-	if (sret < (int)sizeof(*hm)) {
+	if (sret < (int)sizeof(struct header_minimal)) {
 		err_msg("packet to small (is %d byte, must at least %u byte",
-				sret, sizeof(*hm));
+				sret, sizeof(struct header_minimal));
 		return;
 	}
 
@@ -333,40 +432,27 @@ static void process_cli_request_udp(struct opts *opts, int server_fd)
                 return;
         }
 
-	/* accounting */
-	bytes_received += (unsigned int)sret;
-
-        switch (header_format) {
-        case HEADER_FORMAT_MINIMAL:
-                hm = (struct header_minimal *)buf;
-                data_len_tx = ntohl(hm->data_length_tx);
-                data_len_rx = ntohs(hm->data_length_rx);
-                sequence_no = ntohs(hm->sequence_number);
-                flow_id     = hm->flow_id;
-                server_delay = 0;
-                server_delay_var = 0;
-                break;
-        case HEADER_FORMAT_EXTENDED:
-                he = (struct header_extended *)buf;
-                data_len_tx = ntohl(he->data_length_tx);
-                data_len_rx = ntohl(he->data_length_rx);
-                sequence_no = ntohl(he->sequence_number);
-                flow_id     = ntohs(he->flow_id);
-                server_delay = ntohs(he->server_delay);
-                server_delay_var = ntohs(he->server_delay_var);
-                break;
-        default:
-                err_msg_die(EXIT_FAILNET, "Unknown header -> programmed error");
-                reset_state(now);
+        ret = parse_header_data(opts, &packet_data, buf, header_format);
+        if (ret != 0) {
+                msg("packet header format malformed");
                 return;
         }
 
+	/* accounting */
+	bytes_received += (unsigned int)sret;
 
-	if (sequence_no == 0) {
+
+        flow_id_stat_update_received(opts, packet_data.flow_id, (unsigned long)sret, now);
+
+
+	if (packet_data.sequence_no == 0) {
 		/* new UDP client connection, we reset everything */
 		bytes_received = 0;
 		no_run = 0;
 		last_output = start = now;
+
+                expected_sequence_no = 0;
+                packet_loss_cnt = 0;
 
 		if (opts->verbose_level > 0) {
 			ret = getnameinfo((struct sockaddr *)&sa, sa_len, hbuf,
@@ -375,24 +461,34 @@ static void process_cli_request_udp(struct opts *opts, int server_fd)
 				err_msg_die(EXIT_FAILNET, "getnameinfo error: %s",  gai_strerror(ret));
 
                         msg("new connections from %s:%s [flow-id: %d, %s]", hbuf, sbuf,
-                            flow_id,
+                            packet_data.flow_id,
                             header_format == HEADER_FORMAT_MINIMAL ?
                                 "minimal header encoding" : "extended header encoding");
 		}
 	}
 
+        if (packet_data.sequence_no != expected_sequence_no) {
+                packet_loss_cnt++;
+        }
+
+        expected_sequence_no = packet_data.sequence_no + 1;
+
 	/* print output for every received packet if verbose
 	 * is a little bit verboser[TM] */
 	if (opts->verbose_level >= 1) {
+                double loss_rate;
+
 		ret = getnameinfo((struct sockaddr *)&sa, sa_len, hbuf,
 				NI_MAXHOST, sbuf, NI_MAXSERV, NI_NUMERICHOST | NI_NUMERICSERV);
 		if (ret != 0)
 			err_msg_die(EXIT_FAILNET, "getnameinfo error: %s",  gai_strerror(ret));
 
-		msg("received %d bytes from %s:%s [seq #: %d]", sret, hbuf, sbuf, sequence_no);
+                loss_rate = ((double)packet_loss_cnt / (packet_data.sequence_no + 1.0)) * 100.0;
+                msg("received %d bytes from %s:%s [seq #: %d, packet loss: %.2lf%%]",
+                    sret, hbuf, sbuf, packet_data.sequence_no, loss_rate);
 	}
 
-	if (opts->verbose_level && ((int)last_output != (int)now)) {
+	if (opts->verbose_level && ((int)last_output != (int)now) && is_format_human(opts->format)) {
 		msg("RX: %lu bytes in %.3lf seconds, throughput: %ld bit/s",
 				bytes_received, now - last_output, (unsigned)((bytes_received * 8) / (now - start)));
 		start = now;
@@ -401,21 +497,23 @@ static void process_cli_request_udp(struct opts *opts, int server_fd)
 
 	}
 
-	if (data_len_rx > 0) {
+	if (packet_data.data_len_rx > 0) {
 
-		data_rx = xzalloc(data_len_rx);
-		memset(data_rx, PAYLOAD_BYTE_PATTERN, data_len_rx);
+		data_rx = xzalloc(packet_data.data_len_rx);
+		memset(data_rx, PAYLOAD_BYTE_PATTERN, packet_data.data_len_rx);
 
-		if (server_delay > 0) {
-			msg("   sleep for %u ms", server_delay);
+		if (packet_data.server_delay > 0) {
+			msg("   sleep for %u ms", packet_data.server_delay);
 			/* FIXME: add variation */
-			msleep(server_delay);
+			msleep(packet_data.server_delay);
 		}
 
 		/* write data_len data back to the client */
 		if (opts->verbose_level > 1)
-			msg("   write %u byte of data back to the client", data_len_rx);
-		sendto(server_fd, data_rx, data_len_rx, 0,(struct sockaddr *)&sa, sa_len);
+			msg("   write %u byte of data back to the client", packet_data.data_len_rx);
+		sendto(server_fd, data_rx, packet_data.data_len_rx, 0,(struct sockaddr *)&sa, sa_len);
+
+                flow_id_stat_update_transmitted(opts, packet_data.flow_id, (unsigned int)packet_data.data_len_rx, xgettimeofday());
 
 		free(data_rx);
 	}
@@ -440,10 +538,10 @@ static void print_throughput(struct conn_data *conn_data, double measurement_sta
         else
                 rx_throughput = 0;
 
-        msg("TX: %lu bytes in %.3lf seconds, throughput: %lu bit/s",
-                conn_data->raw_bytes_send, delta_time, tx_throughput);
-        msg("RX: %lu bytes in %.3lf seconds, throughput: %lu bit/s",
-                conn_data->raw_bytes_read, delta_time, rx_throughput);
+		msg("TX: %lu bytes in %.3lf seconds, throughput: %lu bit/s",
+				conn_data->raw_bytes_send, delta_time, tx_throughput);
+		msg("RX: %lu bytes in %.3lf seconds, throughput: %lu bit/s",
+				conn_data->raw_bytes_read, delta_time, rx_throughput);
 }
 
 
@@ -460,7 +558,9 @@ static void process_cli_request_tcp(int server_fd, struct opts *opts)
         conn_data.raw_bytes_read = 0;
         conn_data.raw_bytes_send = 0;
 
-	msg("block in accept(2)");
+    if (is_format_human(opts->format))
+		msg("block in accept(2)");
+
 	connected_fd = accept(server_fd, (struct sockaddr *) &sa, &sa_len);
 	if (connected_fd == -1) {
 		err_sys("accept error");
@@ -475,16 +575,21 @@ static void process_cli_request_tcp(int server_fd, struct opts *opts)
 	if (ret != 0)
 		err_msg_die(EXIT_FAILNET, "getnameinfo error: %s",  gai_strerror(ret));
 
-	msg("connection established from %s:%s", hbuf, sbuf);
+    if (is_format_human(opts->format))
+		msg("connection established from %s:%s", hbuf, sbuf);
 
-        measurement_start = xgettimeofday();
+    measurement_start = xgettimeofday();
 
 	while (rx_tx_data_tcp(connected_fd, &conn_data, opts) == SUCCESS)
 		;
 
         measurement_end = xgettimeofday();
 
-        print_throughput(&conn_data, measurement_start, measurement_end);
+		if (is_format_human(opts->format)) {
+			print_throughput(&conn_data, measurement_start, measurement_end);
+		}
+
+		flow_id_stat_print(opts, xgettimeofday());
 }
 
 static const char *network_family_str(int family)
@@ -572,10 +677,12 @@ static int init_srv_socket(const struct opts *opts)
 				"Don't found a suitable socket to connect to the client"
 				", giving up");
 
-	msg("bind to port %s via %s using %s socket [%s:%s]",
+    if (is_format_human(opts->format)) {
+		msg("bind to port %s via %s using %s socket [%s:%s]",
 			opts->port, network_protocol_str(opts->ai_protocol),
 			network_family_str(addrtmp->ai_family),
 			addrtmp->ai_family == AF_INET ? "0.0.0.0" : "::", opts->port);
+	}
 
 	freeaddrinfo(hostres);
 
@@ -593,11 +700,16 @@ static void die_version(void)
 static void print_usage(const char *me)
 {
         fprintf(stdout, "%s <options>\n"
-                "  --port, -p <port>\n"
-                "  --protocol, -t <tcp | udp> \n"
-                "  --bind, -b <bind-addr>\n\tlocal address to bind on\n"
-                "  --setsockopt (-S) <option:arg1:arg2:...>\n\tset the socketoption \"option\" with argument arg1, arg2, ...\n"
-                "  --verbose, -v\n", me);
+                "   --ipv4 (-4)\n\tenforces to use AF_INET socket (default AF_UNSPEC)\n"
+                "   --ipv6 (-6)\n\tenforces to use AF_INET6 socket (default AF_UNSPEC)\n"
+                "   --transport (-t) <tcp | udp>\n\tspecify what transport protocol should be used: TCP or UDP\n"
+                "   --port (-p) <port>\n\tdestination port of connection (default: 5001) \n"
+                "   --bind, -b <bind-addr>\n\tlocal address to bind on\n"
+                "   --setsockopt (-S) <option:arg1:arg2:...>\n\tset the socketoption \"option\" with argument arg1, arg2, ...\n"
+                "   --format (-f) <json | human>\n\tControl output format, human is default\n"
+                "   --report (-) <json | human>\n\tControl output format, human is default\n"
+		"   --verbose (-v)\n\tverbose output to STDOUT, the more -v the more verbose\n",
+                me);
 }
 
 
@@ -617,6 +729,7 @@ int main(int ac, char *av[])
 	opts.iteration_limit  = 0;
 	opts.port             = strdup(DEFAULT_PORT);
         opts.bind_addr        = NULL;
+        opts.format           = FORMAT_DEFAULT;
 
 	init_network_stack();
 
@@ -632,9 +745,10 @@ int main(int ac, char *av[])
 			{"transport",    1, 0, 't'},
 			{"setsockopt",   1, 0, 'S'},
                         {"bind",         1, 0, 'b'},
+                        {"format",       1, 0, 'f'},
 			{0, 0, 0, 0}
 		};
-                c = xgetopt_long(ac, av, "p:b:t:S:vh46V",
+                c = xgetopt_long(ac, av, "p:b:t:S:f:vh46V",
 				long_options, &option_index);
 		if (c == -1)
 			break;
@@ -680,6 +794,19 @@ int main(int ac, char *av[])
 					exit(EXIT_FAILOPT);
 				}
 				break;
+                        case 'f':
+                                if (!strcasecmp("json", optarg)) {
+                                        opts.format  = FORMAT_JSON;
+                                } else if (!strcasecmp("human", optarg)) {
+                                        opts.format  = FORMAT_HUMAN;
+                                } else if (!strcasecmp("JSON", optarg)) {
+                                        opts.format  = FORMAT_JSON;
+                                } else {
+                                        err_msg("format \"%s\" not supported! Only \"json\" and \"human\"",
+                                                optarg);
+                                        exit(EXIT_FAILOPT);
+                                }
+                                break;
 			case 'h':
 				print_usage(av[0]);
 				exit(EXIT_SUCCESS);
@@ -693,13 +820,17 @@ int main(int ac, char *av[])
 		}
 	}
 
-	msg(PROGRAMNAME " - " VERSIONSTRING);
+    if (is_format_human(opts.format))
+		msg(PROGRAMNAME " - " VERSIONSTRING);
 
-	msg("initialize server socket");
+    if (is_format_human(opts.format))
+		msg("initialize server socket");
 	socket_fd = init_srv_socket(&opts);
 
 	/* set all previously set socket option */
 	set_socketopts(socket_fd, opts.ai_protocol);
+
+        flow_id_stat_table_init(&opts);
 
 	switch (opts.ai_protocol) {
 	case IPPROTO_TCP:

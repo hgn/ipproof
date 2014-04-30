@@ -73,7 +73,7 @@
 #endif
 
 #define PROGRAMNAME "ipproof"
-#define VERSIONSTRING "008"
+#define VERSIONSTRING "010"
 
 #define	DEFAULT_AI_SOCKTYPE SOCK_STREAM
 #define	DEFAULT_AI_PROTOCOL IPPROTO_TCP
@@ -369,6 +369,13 @@ enum {
         VMSG_ERROR
 };
 
+enum {
+        FORMAT_HUMAN,
+        FORMAT_JSON,
+};
+
+#define FORMAT_DEFAULT FORMAT_HUMAN
+
 /* shared.c */
 //void vmsg(int level, const char *, ...);
 void msg(const char *, ...);
@@ -393,6 +400,9 @@ int optarg_set_socketopts(const char *, struct socket_options *);
 void set_socketopts(int, int);
 long long a_to_bit_s(const char *);
 int xatoi(const char *, int *);
+const char *format_str(unsigned int format);
+int is_format_human(unsigned int format);
+int is_format_json(unsigned int format);
 
 
 

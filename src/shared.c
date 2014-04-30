@@ -82,8 +82,6 @@ void xsetsockopt(int s, int level, int optname,
 {
 	int ret;
 
-	msg("set socket option %s", str);
-
 	ret = setsockopt(s, level, optname, optval, optlen);
 	if (ret)
 		err_sys_die(EXIT_FAILNET, "Can't set socketoption %s", str);
@@ -316,10 +314,8 @@ ssize_t read_len(int fd, const void *buf, size_t len)
 			break;
 		}
 
-		if (cur == 0) {
-			msg("read return 0, read_actual: %u", read_actual);
+		if (cur == 0)
 			return 0;
-		}
 
 		bufptr += cur; read_actual += cur;
 
@@ -897,7 +893,7 @@ int xatoi(const char *str, int *ret)
 
 int xrand(void)
 {
-        return (rand() << 16) | (rand() & 0xff);
+        return (rand() << 16) | (rand() & 0xffff);
 }
 
 
@@ -905,6 +901,35 @@ int xrand(void)
 {
         return (int)((xrand() * 1.0) / (RAND_MAX + 1) * (max - min) + min);
 }
+
+
+const char *format_str(unsigned int format)
+{
+        switch (format) {
+        case FORMAT_HUMAN:
+                return "human readable";
+                break;
+        case FORMAT_JSON:
+                return "JSON";
+                break;
+        default:
+                assert(0);
+                break;
+        }
+}
+
+
+int is_format_human(unsigned int format)
+{
+        return format == FORMAT_HUMAN;
+}
+
+
+int is_format_json(unsigned int format)
+{
+        return format == FORMAT_JSON;
+}
+
 
 
 /* vim: set tw=78 ts=4 sw=4 sts=4 ff=unix noet: */

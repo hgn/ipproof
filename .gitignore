@@ -6,4 +6,6 @@ win/debug/
 win/server/Debug/
 win/server/server.vcproj.*
 win/win.ncb
+win/win.suo
 
+src/.*

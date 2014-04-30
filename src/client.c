@@ -32,8 +32,8 @@ enum {
 };
 
 #define DEFAULT_PAYLOAD_PATTERN PAYLOAD_PATTERN_STATIC
-
 #define DSCP_UNMODIFIED UINT_MAX
+
 
 struct opts {
 	char *hostname;
@@ -60,6 +60,8 @@ struct opts {
 	unsigned random_bandwidth; /* bit/s */
 
 	unsigned int dscp;
+
+        unsigned int format;
 };
 
 
@@ -103,7 +105,7 @@ static int tx_data(struct opts *o, int header_format, char *packet, int fd, int 
                 break;
         }
 
-	if (o->verbose_level && counter % 100 == 0) {
+	if (o->verbose_level && counter % 100 == 0 && is_format_human(o->format)) {
 		msg("transmit %u byte", size);
 	}
 
@@ -296,6 +298,7 @@ static void print_usage(const char *me)
 			"   --ipv4 (-4)\n\tenforces to use AF_INET socket (default AF_UNSPEC)\n"
 			"   --ipv6 (-6)\n\tenforces to use AF_INET6 socket (default AF_UNSPEC)\n"
 			"   --hostname (-e) <hostname>\n\tspecify the destination host\n"
+                        "   --transport (-t) <tcp | udp>\n\tspecify what transport protocol should be used: TCP or UDP\n"
                         "   --port (-p) <port>\n\tdestination port of connection (default: 5001) \n"
 			"   --interval (-i)\n\tinterval between the generation (and reception) of packets in us\n"
 			"   --iterations (-n) <number>\n\tlimit the number of transmissions\n"
@@ -311,7 +314,8 @@ static void print_usage(const char *me)
                         "   --payload-pattern <static | ascii-random | random | random-reduced>\n\tconfigures the packet payload pattern\n"
                         "   --bind (b) <address>\n\tbind socket to local address\n"
                         "   --dscp (C) <value>\n\tset DSCP (Diffserv) value (currently only supported for Linux)\n"
-			"   --verbose (-v)\n\tverbose output to STDOUT\n"
+			"   --verbose (-v)\n\tverbose output to STDOUT, the more -v the more verbose\n"
+                        "   --format (-f) <json | human>\n\tControl output format, human is default\n"
 			"\n"
 			"Examples:\n"
 			"   ipproof-client -4 -vv -e example.com -r 0 -t udp -R 1000:1000:5000kbit\n"
@@ -416,19 +420,23 @@ out:
 
 static void print_opts(struct opts *opts)
 {
+        int ret;
+        char buf[32];
+
         if (opts->verbose_level < 1)
                 return;
 
 	msg("ipproof options:");
-	msg("  Network protocol:\t\t%s", opts->af_family==2 ? "IPv4" : "IPv6");
-	msg("  Verbose:\t\t\t%d",          opts->verbose_level);
-	msg("  Destination:\t\t\t%s",         opts->hostname);
-	msg("  Interval:\t\t\t%d",         opts->packet_interval);
-	msg("  Iterations:\t\t%d",       opts->iterations);
-	msg("  TX packetsize:\t\t%d",     opts->tx_packet_size);
-	msg("  RX packetsize:\t\t%d",     opts->rx_packet_size);
-	msg("  Port:\t\t\t%s",           opts->port);
-	msg("  Payload-pattern:\t%s",    rand_val_str(opts->payload_pattern));
+	msg("    Network protocol:  %s", opts->af_family == 2 ? "IPv4" : "IPv6");
+	msg("    Verbose:           %d", opts->verbose_level);
+	msg("    Destination:       %s", opts->hostname);
+	msg("    Interval:          %d", opts->packet_interval);
+	msg("    Iterations:        %d", opts->iterations);
+	msg("    TX packetsize:     %d", opts->tx_packet_size);
+	msg("    RX packetsize:     %d", opts->rx_packet_size);
+	msg("    Port:              %s", opts->port);
+	msg("    Payload-pattern:   %s", rand_val_str(opts->payload_pattern));
+        msg("    Format:            %s", format_str(opts->format));
 }
 
 
@@ -455,6 +463,7 @@ static int xgetopts(int ac, char **av, struct opts *opts)
 	opts->bind_addr        = NULL;
 	opts->payload_pattern  = DEFAULT_PAYLOAD_PATTERN;
 	opts->dscp             = DSCP_UNMODIFIED;
+        opts->format           = FORMAT_DEFAULT;
 
 	while (1) {
 		static struct option long_options[] = {
@@ -478,10 +487,11 @@ static int xgetopts(int ac, char **av, struct opts *opts)
 			{"bind",            1, 0, 'b'},
 			{"payload-pattern", 1, 0, 'P'},
 			{"dscp",            1, 0, 'C'},
+                        {"format",          1, 0, 'f'},
 			{0, 0, 0, 0}
 		};
 
-		c = xgetopt_long(ac, av, "t:i:s:t:e:p:P:n:d:D:r:S:R:b:C:vhc46V",
+                c = xgetopt_long(ac, av, "t:i:s:t:e:p:P:n:d:D:r:S:R:b:C:f:vhc46V",
 				 long_options, &option_index);
 		if (c == -1)
 			break;
@@ -591,6 +601,19 @@ static int xgetopts(int ac, char **av, struct opts *opts)
 					err_msg("DSCP value out of range: must be 0 - 63");
 					exit(EXIT_FAILOPT);
 				}
+                        case 'f':
+                                if (!strcasecmp("json", optarg)) {
+                                        opts->format  = FORMAT_JSON;
+                                } else if (!strcasecmp("human", optarg)) {
+                                        opts->format  = FORMAT_HUMAN;
+                                } else if (!strcasecmp("JSON", optarg)) {
+                                        opts->format  = FORMAT_JSON;
+                                } else {
+                                        err_msg("format \"%s\" not supported! Only \"json\" and \"human\"",
+                                                optarg);
+                                        exit(EXIT_FAILOPT);
+                                }
+                                break;
 			case '?':
 				break;
 
@@ -639,8 +662,10 @@ static int calculate_random_traffic_delay(const struct opts *opts)
 	/* calculation is done in byte */
 	delay = (int)(((double)avg / (((double)opts->random_bandwidth) / 8)) * FACTOR_US_S);
 
-	msg("packet delay: %d usec [avg-packet-size: %d byte   bw: %d bits/s]",
-		delay, avg, opts->random_bandwidth);
+        if (is_format_human(opts->format)) {
+	        msg("packet delay: %d usec [avg-packet-size: %d byte   bw: %d bits/s]",
+		        delay, avg, opts->random_bandwidth);
+        }
 
 	if (delay < 0 || delay > 100000000) {
 		err_msg("delay to large: is %d and should between 0 and 100000000)"
@@ -656,7 +681,7 @@ static double measurement_start, measurement_end;
 unsigned long bytes_sent, bytes_received;
 
 
-void print_throughput(void)
+void print_throughput(struct opts *opts, uint16_t flow_id)
 {
         unsigned long tx_throughput, rx_throughput;
         double delta_time;
@@ -673,14 +698,37 @@ void print_throughput(void)
         else
                 rx_throughput = 0;
 
-        msg("TX: %lu bytes in %.3lf seconds, throughput: %lu bit/s",
-                bytes_sent, delta_time, tx_throughput);
-        msg("RX: %lu bytes in %.3lf seconds, throughput: %lu bit/s",
-                bytes_received, delta_time, rx_throughput);
+        switch (opts->format) {
+        case FORMAT_HUMAN:
+                msg("Flow ID: %u", flow_id);
+                msg("TX: %lu bytes in %.3lf seconds, throughput: %lu bit/s",
+                        bytes_sent, delta_time, tx_throughput);
+                msg("RX: %lu bytes in %.3lf seconds, throughput: %lu bit/s",
+                        bytes_received, delta_time, rx_throughput);
+               break;
+        case FORMAT_JSON:
+                /* { "instance": "client",  "tx-data":10000,  "rx-data":10, 
+                 *   "rx-time":10000, "rx-time":10000.0, "tx-goodput":0.01,
+                 *   "rx-goodput":10, "version": 007  } */
+                fprintf(stdout, "{ \"instance\": \"client\", "
+                                "\"tx-data\": %lu, \"rx-data\": %lu, "
+                                "\"tx-time\": %.5lf, \"rx-time\": %.5lf, "
+                                "\"tx-goodput\": %lu, \"rx-goodput\": %lu, "
+				"\"goodput-unit\": \"bit/s\", "
+                                "\"flow-id\": %u "
+                                "}\n",
+                        bytes_sent, bytes_received, delta_time, delta_time,
+                        tx_throughput, rx_throughput, flow_id
+                    );
+                break;
+        default:
+                assert(0);
+                break;
+        }
 }
 
 
-
+#if 0
 #if defined(WIN32)
 static BOOL WINAPI console_ctrl_handler(DWORD signum)
 {
@@ -712,6 +760,7 @@ static void signal_callback_handler(int signum)
 	print_throughput();
 	exit(0);
 }
+#endif
 #endif
 
 
@@ -767,15 +816,17 @@ static void init_packet_payload(struct opts *opts, int header_format, char *pack
 
 static void register_ctrl_handler(void)
 {
+#if 0
 #if defined(WIN32)
 	SetConsoleCtrlHandler(console_ctrl_handler, TRUE);
 #else
 	signal(SIGINT, signal_callback_handler);
 #endif
+#endif
 }
 
 
-static char *construct_extended_packet(struct opts *opts)
+static char *construct_extended_packet(struct opts *opts, uint16_t flow_id)
 {
         char *packet;
         struct header_extended *header_extended;
@@ -786,7 +837,7 @@ static char *construct_extended_packet(struct opts *opts)
         header_extended->preambel = PREAMBEL_COOKIE;
         header_extended->preambel = header_extended->preambel | PREAMBEL_EXTENDED_HEADER;
 
-        header_extended->flow_id = (be16)xrand();
+        header_extended->flow_id = (be16)flow_id;
         header_extended->sequence_number = 0;
 
         header_extended->data_length_tx = htonl(opts->tx_packet_size);
@@ -799,7 +850,7 @@ static char *construct_extended_packet(struct opts *opts)
 }
 
 
-static char *construct_minimal_packet(struct opts *opts)
+static char *construct_minimal_packet(struct opts *opts, uint8_t flow_id)
 {
         char *packet;
         struct header_minimal *header_minimal;
@@ -809,7 +860,7 @@ static char *construct_minimal_packet(struct opts *opts)
 
         header_minimal->preambel =PREAMBEL_COOKIE;
 
-        header_minimal->flow_id = (uint8_t)rand();
+        header_minimal->flow_id = flow_id;
         header_minimal->sequence_number = 0;
         header_minimal->data_length_tx = htonl(opts->tx_packet_size);
         header_minimal->data_length_rx = htons((int16_t)opts->rx_packet_size);
@@ -851,6 +902,7 @@ int main(int ac, char **av)
 	unsigned long counter = 0, printout_level = 100;
         char *blob;
         int header_format;
+        uint16_t flow_id;
 
 	init_network_stack();
 
@@ -858,40 +910,30 @@ int main(int ac, char **av)
 	if (ret != SUCCESS)
 		err_msg_die(EXIT_FAILOPT, "failure in commandline options");
 
-	msg(PROGRAMNAME " - " VERSIONSTRING);
-
-        print_opts(&opts);
+        if (is_format_human(opts.format))
+	        msg(PROGRAMNAME " - " VERSIONSTRING);
 
         if (opts.verbose_level > 2)
                 printout_level = 1;
 
 
         if (opts.tx_packet_size >= sizeof(struct header_extended)) {
+                flow_id = xrand() & 0xffff;
                 header_format = HEADER_FORMAT_EXTENDED;
-                blob = construct_extended_packet(&opts);
+                blob = construct_extended_packet(&opts, (uint16_t)flow_id);
         } else {
+                flow_id = xrand() & 0xff;
                 header_format = HEADER_FORMAT_MINIMAL;
-                blob = construct_minimal_packet(&opts);
+                blob = construct_minimal_packet(&opts, (uint8_t)flow_id);
         }
+
+        if (is_format_human(opts.format))
+                print_opts(&opts);
+
 
         init_packet_payload(&opts, header_format, blob);
 
 
-	//packet = xzalloc(opts.tx_packet_size);
-
-	/* subtracting header overhead */
-	//opts.tx_packet_size -= sizeof(struct packet);
-
-
-	//packet->magic            = MAGIC_COOKIE;
-	//packet->sequence_no      = 0;
-	//packet->data_len_tx      = htons(opts.tx_packet_size);
-	//packet->data_len_rx      = htons(opts.rx_packet_size);
-	//packet->server_delay     = htons(opts.server_delay);
-	//packet->server_delay_var = htons(opts.server_delay_var);
-
-	/* this is a simple buffer container. Received data is
-	 * written there */
 	if (opts.rx_packet_size)
 		data_rx = xzalloc(opts.rx_packet_size);
 
@@ -908,10 +950,9 @@ int main(int ac, char **av)
                 eh->data_len_tx = htonl(opts.tx_packet_size);
                 eh->data_len_rx = htonl(opts.rx_packet_size);
                 eh->sequence_no = 0;
-                eh->id = 
+                eh->id =
         }
 #endif
-
 
 	/* connect to server */
 	socket_fd = init_cli_socket(&opts);
@@ -920,12 +961,14 @@ int main(int ac, char **av)
 
 	measurement_start = last_packet_time = xgettimeofday();
 
-
         print_header_summary(header_format, blob);
+
+	if (is_format_human(opts.format))
+		msg("start to send data to %s", opts.hostname);
 
 	while (!opts.iteration_limit_enabled || opts.iterations--) {
 		int adjust;
-		if (opts.verbose_level && counter % printout_level == 0) {
+		if (opts.verbose_level && counter % printout_level == 0 && is_format_human(opts.format)) {
 			msg("transmit packet %u of size %d [byte]", counter,
 					opts.tx_packet_size);
 		}
@@ -940,7 +983,7 @@ int main(int ac, char **av)
 			opts.packet_interval = adjust;
 
 		if (opts.packet_interval > 0) {
-			if (opts.verbose_level > 1)
+			if (opts.verbose_level > 1 && is_format_human(opts.format))
 				msg("delay transmission of next packet for %u us", opts.packet_interval);
 			xusleep(opts.packet_interval);
 		}
@@ -964,7 +1007,7 @@ int main(int ac, char **av)
 		/* wait and read data from server */
 		if (opts.rx_packet_size) {
 
-			if (opts.verbose_level > 1)
+			if (opts.verbose_level > 1 && is_format_human(opts.format))
 				msg("  block in read (waiting for %u bytes)",
 						opts.rx_packet_size);
 			sret = read_len(socket_fd, data_rx, opts.rx_packet_size);
@@ -977,7 +1020,7 @@ int main(int ac, char **av)
 
 			end = xgettimeofday();
 
-			if (opts.verbose_level > 1) {
+			if (opts.verbose_level > 1 && is_format_human(opts.format)) {
 				msg("  received %u byte payload [application layer RTT: %.6lf ms]",
 						opts.rx_packet_size, end - start);
 			}
@@ -1005,6 +1048,8 @@ int main(int ac, char **av)
 
 		}
 
+
+
 		counter++;
 
 	}
@@ -1016,7 +1061,7 @@ int main(int ac, char **av)
 
 	fini_network_stack();
 
-	print_throughput();
+	print_throughput(&opts, flow_id);
 
 	return EXIT_SUCCESS;
 }
