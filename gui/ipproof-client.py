@@ -53,7 +53,7 @@ class IPProofGui(Frame):
         print('bind:               %s'      % (self.config['bind'].get()))
         print('verbose:            %d'      % (self.config['verbose-output'].get()))
 
-        path = 'Z:\\sdxr_platform\\tools\\ipproof\\win\\debug\\client.exe'
+        path = 'Z:\\sdxr_platform\\tools\\ipproof\\win\\debug\\ipproof-client.exe'
         cmd = "%s -e %s -p %s -n %s --txpacketsize %s --rxpacketsize %s --transport %s --interval %s --server-delay %s --server-delay-variation %s" % \
             (path, self.config['ip-destination'].get(), self.config['port'].get(), no_transmissions,
                     self.config['tx-payload'].get(), self.config['rx-payload'].get(),

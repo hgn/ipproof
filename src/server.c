@@ -27,24 +27,25 @@
 extern struct socket_options socket_options[];
 
 struct conn_data {
-	unsigned int sequence_no;
-	int sequence_initialized;
+        unsigned int sequence_no;
+        int sequence_initialized;
         unsigned long raw_bytes_read;
         unsigned long raw_bytes_send;
 };
 
 struct opts {
-	char *port;
+        char *port;
         char *bind_addr;
-	unsigned packet_size;
-	unsigned packet_interval;
-	unsigned verbose_level;
-	unsigned iterations;
-	int iteration_limit;
-	int af_family;
-	int ai_socktype;
-	int ai_protocol;
+        unsigned packet_size;
+        unsigned packet_interval;
+        unsigned verbose_level;
+        unsigned iterations;
+        int iteration_limit;
+        int af_family;
+        int ai_socktype;
+        int ai_protocol;
         int format;
+        int continue_out;
 };
 
 
@@ -105,6 +106,7 @@ static void flow_id_stat_print(struct opts *opts, double now)
                         flow_id_stat.bytes_transmitted, flow_id_stat.bytes_received,
                         delta_time, delta_time,
                         tx_throughput, rx_throughput, flow_id_stat.flow_id);
+                fflush(stdout);
         }
 }
 
@@ -127,16 +129,16 @@ void flow_id_stat_update_received(struct opts *opts, uint16_t flow_id, unsigned 
                 flow_id_stat.bytes_transmitted = 0;
                 flow_id_stat.first_packet = flow_id_stat.last_packet = now;
                 flow_id_stat.flow_id = flow_id;
-				if (VERBOSE_EXTENSIVE(opts->verbose_level))
-					msg("new connection");
+                if (VERBOSE_EXTENSIVE(opts->verbose_level))
+                        msg("new connection");
                 return;
         }
 
         flow_id_stat.bytes_received += bytes;
         flow_id_stat.last_packet = now;
 
-		if (VERBOSE_EXTENSIVE(opts->verbose_level))
-			msg("data received: %llu byte", flow_id_stat.bytes_received);
+        if (VERBOSE_EXTENSIVE(opts->verbose_level))
+                msg("data received: %llu byte", flow_id_stat.bytes_received);
 }
 
 
@@ -313,6 +315,9 @@ static int rx_tx_data_tcp(int fd, struct conn_data *conn_data, struct opts *opts
                 return FAILURE;
         }
 
+        flow_id_stat_update_received(opts, packet_data.flow_id,
+                                     (unsigned long)header_size,
+                                     xgettimeofday());
 
         conn_data->raw_bytes_read += (unsigned long)header_size;
 
@@ -333,9 +338,7 @@ static int rx_tx_data_tcp(int fd, struct conn_data *conn_data, struct opts *opts
         }
 
         conn_data->raw_bytes_read += ret;
-        flow_id_stat_update_received(opts, packet_data.flow_id,
-                                     (unsigned long)header_size + ret,
-                                     xgettimeofday());
+        flow_id_stat_update_received(opts, packet_data.flow_id, ret, xgettimeofday());
 
         /*
          * it the client enforce artificial server delay and/or server
@@ -401,29 +404,29 @@ static void reset_state(double time_now)
 
 static void process_cli_request_udp(struct opts *opts, int server_fd)
 {
-	ssize_t sret; int ret, flags = 0;
-	struct sockaddr_storage sa;
-	socklen_t sa_len = sizeof(sa);
-	char *data_rx;
-	char hbuf[NI_MAXHOST], sbuf[NI_MAXSERV];
-	static char buf[MAX_UDP_DATAGRAM];
+        ssize_t sret; int ret, flags = 0;
+        struct sockaddr_storage sa;
+        socklen_t sa_len = sizeof(sa);
+        char *data_rx;
+        char hbuf[NI_MAXHOST], sbuf[NI_MAXSERV];
+        static char buf[MAX_UDP_DATAGRAM];
         int header_format, flow_end;
         struct packet_data packet_data;
 
-	sret = recvfrom(server_fd, (char *)&buf, sizeof(buf), flags,
-			(struct sockaddr *)&sa, &sa_len);
-	if (sret < 0) {
-		err_sys("failure in recvfrom() - return code %d", sret);
-		return;
-	}
+        sret = recvfrom(server_fd, (char *)&buf, sizeof(buf), flags,
+                        (struct sockaddr *)&sa, &sa_len);
+        if (sret < 0) {
+                err_sys("failure in recvfrom() - return code %d", sret);
+                return;
+        }
 
-	now = xgettimeofday();
+        now = xgettimeofday();
 
-	if (sret < (int)sizeof(struct header_minimal)) {
-		err_msg("packet to small (is %d byte, must at least %u byte",
-				sret, sizeof(struct header_minimal));
-		return;
-	}
+        if (sret < (int)sizeof(struct header_minimal)) {
+                err_msg("packet to small (is %d byte, must at least %u byte",
+                                sret, sizeof(struct header_minimal));
+                return;
+        }
 
         ret = verify_cookie(opts, buf, &header_format, &flow_end);
         if (ret != 0) {
@@ -438,34 +441,34 @@ static void process_cli_request_udp(struct opts *opts, int server_fd)
                 return;
         }
 
-	/* accounting */
-	bytes_received += (unsigned int)sret;
+        /* accounting */
+        bytes_received += (unsigned int)sret;
 
 
         flow_id_stat_update_received(opts, packet_data.flow_id, (unsigned long)sret, now);
 
 
-	if (packet_data.sequence_no == 0) {
-		/* new UDP client connection, we reset everything */
-		bytes_received = 0;
-		no_run = 0;
-		last_output = start = now;
+        if (packet_data.sequence_no == 0) {
+                /* new UDP client connection, we reset everything */
+                bytes_received = 0;
+                no_run = 0;
+                last_output = start = now;
 
                 expected_sequence_no = 0;
                 packet_loss_cnt = 0;
 
-		if (opts->verbose_level > 0) {
-			ret = getnameinfo((struct sockaddr *)&sa, sa_len, hbuf,
-					NI_MAXHOST, sbuf, NI_MAXSERV, NI_NUMERICHOST | NI_NUMERICSERV);
-			if (ret != 0)
-				err_msg_die(EXIT_FAILNET, "getnameinfo error: %s",  gai_strerror(ret));
+                if (opts->verbose_level > 0) {
+                        ret = getnameinfo((struct sockaddr *)&sa, sa_len, hbuf,
+                                        NI_MAXHOST, sbuf, NI_MAXSERV, NI_NUMERICHOST | NI_NUMERICSERV);
+                        if (ret != 0)
+                                err_msg_die(EXIT_FAILNET, "getnameinfo error: %s",  gai_strerror(ret));
 
                         msg("new connections from %s:%s [flow-id: %d, %s]", hbuf, sbuf,
                             packet_data.flow_id,
                             header_format == HEADER_FORMAT_MINIMAL ?
                                 "minimal header encoding" : "extended header encoding");
-		}
-	}
+                }
+        }
 
         if (packet_data.sequence_no != expected_sequence_no) {
                 packet_loss_cnt++;
@@ -473,52 +476,57 @@ static void process_cli_request_udp(struct opts *opts, int server_fd)
 
         expected_sequence_no = packet_data.sequence_no + 1;
 
-	/* print output for every received packet if verbose
-	 * is a little bit verboser[TM] */
-	if (opts->verbose_level >= 1) {
+        /* print output for every received packet if verbose
+         * is a little bit verboser[TM] */
+        if (opts->verbose_level >= 1) {
                 double loss_rate;
 
-		ret = getnameinfo((struct sockaddr *)&sa, sa_len, hbuf,
-				NI_MAXHOST, sbuf, NI_MAXSERV, NI_NUMERICHOST | NI_NUMERICSERV);
-		if (ret != 0)
-			err_msg_die(EXIT_FAILNET, "getnameinfo error: %s",  gai_strerror(ret));
+                ret = getnameinfo((struct sockaddr *)&sa, sa_len, hbuf,
+                                NI_MAXHOST, sbuf, NI_MAXSERV, NI_NUMERICHOST | NI_NUMERICSERV);
+                if (ret != 0)
+                        err_msg_die(EXIT_FAILNET, "getnameinfo error: %s",  gai_strerror(ret));
 
                 loss_rate = ((double)packet_loss_cnt / (packet_data.sequence_no + 1.0)) * 100.0;
                 msg("received %d bytes from %s:%s [seq #: %d, packet loss: %.2lf%%]",
                     sret, hbuf, sbuf, packet_data.sequence_no, loss_rate);
-	}
+        }
 
-	if (opts->verbose_level && ((int)last_output != (int)now) && is_format_human(opts->format)) {
-		msg("RX: %lu bytes in %.3lf seconds, throughput: %ld bit/s",
-				bytes_received, now - last_output, (unsigned)((bytes_received * 8) / (now - start)));
-		start = now;
-		last_output = now;
-		bytes_received = 0;
+        if (opts->verbose_level && ((int)last_output != (int)now) && is_format_human(opts->format)) {
+                msg("RX: %lu bytes in %.3lf seconds, throughput: %ld bit/s",
+                                bytes_received, now - last_output, (unsigned)((bytes_received * 8) / (now - start)));
+                start = now;
+                last_output = now;
+                bytes_received = 0;
 
-	}
+        }
 
-	if (packet_data.data_len_rx > 0) {
+        if (packet_data.data_len_rx > 0) {
 
-		data_rx = xzalloc(packet_data.data_len_rx);
-		memset(data_rx, PAYLOAD_BYTE_PATTERN, packet_data.data_len_rx);
+                data_rx = xzalloc(packet_data.data_len_rx);
+                memset(data_rx, PAYLOAD_BYTE_PATTERN, packet_data.data_len_rx);
 
-		if (packet_data.server_delay > 0) {
-			msg("   sleep for %u ms", packet_data.server_delay);
-			/* FIXME: add variation */
-			msleep(packet_data.server_delay);
-		}
+                if (packet_data.server_delay > 0) {
+                        msg("   sleep for %u ms", packet_data.server_delay);
+                        /* FIXME: add variation */
+                        msleep(packet_data.server_delay);
+                }
 
-		/* write data_len data back to the client */
-		if (opts->verbose_level > 1)
-			msg("   write %u byte of data back to the client", packet_data.data_len_rx);
-		sendto(server_fd, data_rx, packet_data.data_len_rx, 0,(struct sockaddr *)&sa, sa_len);
+                /* write data_len data back to the client */
+                if (opts->verbose_level > 1)
+                        msg("   write %u byte of data back to the client", packet_data.data_len_rx);
+                sendto(server_fd, data_rx, packet_data.data_len_rx, 0,(struct sockaddr *)&sa, sa_len);
 
                 flow_id_stat_update_transmitted(opts, packet_data.flow_id, (unsigned int)packet_data.data_len_rx, xgettimeofday());
 
-		free(data_rx);
-	}
+                free(data_rx);
+        }
 
-	no_run++;
+
+        if (opts->continue_out) {
+                flow_id_stat_print(opts, now);
+        }
+
+        no_run++;
 }
 
 static void print_throughput(struct conn_data *conn_data, double measurement_start, double measurement_end)
@@ -538,162 +546,161 @@ static void print_throughput(struct conn_data *conn_data, double measurement_sta
         else
                 rx_throughput = 0;
 
-		msg("TX: %lu bytes in %.3lf seconds, throughput: %lu bit/s",
-				conn_data->raw_bytes_send, delta_time, tx_throughput);
-		msg("RX: %lu bytes in %.3lf seconds, throughput: %lu bit/s",
-				conn_data->raw_bytes_read, delta_time, rx_throughput);
+                msg("TX: %lu bytes in %.3lf seconds, throughput: %lu bit/s",
+                                conn_data->raw_bytes_send, delta_time, tx_throughput);
+                msg("RX: %lu bytes in %.3lf seconds, throughput: %lu bit/s",
+                                conn_data->raw_bytes_read, delta_time, rx_throughput);
 }
 
 
 static void process_cli_request_tcp(int server_fd, struct opts *opts)
 {
-	int connected_fd = -1, ret;
-	struct sockaddr_storage sa;
-	socklen_t sa_len = sizeof sa;
-	char hbuf[NI_MAXHOST], sbuf[NI_MAXSERV];
-	struct conn_data conn_data;
+        int connected_fd = -1, ret;
+        struct sockaddr_storage sa;
+        socklen_t sa_len = sizeof sa;
+        char hbuf[NI_MAXHOST], sbuf[NI_MAXSERV];
+        struct conn_data conn_data;
         double measurement_start, measurement_end;
 
-	conn_data.sequence_initialized = 0;
+        conn_data.sequence_initialized = 0;
         conn_data.raw_bytes_read = 0;
         conn_data.raw_bytes_send = 0;
 
-    if (is_format_human(opts->format))
-		msg("block in accept(2)");
+        if (is_format_human(opts->format))
+                msg("block in accept(2)");
 
-	connected_fd = accept(server_fd, (struct sockaddr *) &sa, &sa_len);
-	if (connected_fd == -1) {
-		err_sys("accept error");
-		exit(EXIT_FAILNET);
-	}
+        connected_fd = accept(server_fd, (struct sockaddr *) &sa, &sa_len);
+        if (connected_fd == -1) {
+                err_sys("accept error");
+                exit(EXIT_FAILNET);
+        }
 
-	/* set all previously set socket option */
-	set_socketopts(connected_fd, opts->ai_protocol);
+        /* set all previously set socket option */
+        set_socketopts(connected_fd, opts->ai_protocol);
 
-	ret = getnameinfo((struct sockaddr *)&sa, sa_len, hbuf,
-			NI_MAXHOST, sbuf, NI_MAXSERV, NI_NUMERICHOST | NI_NUMERICSERV);
-	if (ret != 0)
-		err_msg_die(EXIT_FAILNET, "getnameinfo error: %s",  gai_strerror(ret));
+        ret = getnameinfo((struct sockaddr *)&sa, sa_len, hbuf,
+                        NI_MAXHOST, sbuf, NI_MAXSERV, NI_NUMERICHOST | NI_NUMERICSERV);
+        if (ret != 0)
+                err_msg_die(EXIT_FAILNET, "getnameinfo error: %s",  gai_strerror(ret));
 
-    if (is_format_human(opts->format))
-		msg("connection established from %s:%s", hbuf, sbuf);
+        if (is_format_human(opts->format))
+                msg("connection established from %s:%s", hbuf, sbuf);
 
-    measurement_start = xgettimeofday();
+        measurement_start = xgettimeofday();
 
-	while (rx_tx_data_tcp(connected_fd, &conn_data, opts) == SUCCESS)
-		;
+        while (rx_tx_data_tcp(connected_fd, &conn_data, opts) == SUCCESS)
+                ;
 
         measurement_end = xgettimeofday();
 
-		if (is_format_human(opts->format)) {
-			print_throughput(&conn_data, measurement_start, measurement_end);
-		}
-
-		flow_id_stat_print(opts, xgettimeofday());
+        if (is_format_human(opts->format)) {
+                print_throughput(&conn_data, measurement_start, measurement_end);
+        }
+        flow_id_stat_print(opts, xgettimeofday());        
 }
 
 static const char *network_family_str(int family)
 {
-	switch (family) {
-	case AF_INET:  return "AF_INET (IPv4)";  break;
-	case AF_INET6: return "AF_INET6 (IPv6)"; break;
-	default:       return "unknown";  break;
-	}
+        switch (family) {
+        case AF_INET:  return "AF_INET (IPv4)";  break;
+        case AF_INET6: return "AF_INET6 (IPv6)"; break;
+        default:       return "unknown";  break;
+        }
 }
 
 
 static const char *network_protocol_str(int protocol)
 {
-	switch (protocol) {
-	case IPPROTO_UDP:  return "IPPROTO_UDP";  break;
-	case IPPROTO_TCP: return "IPPROTO_TCP"; break;
-	default:       return "unknown";  break;
-	}
+        switch (protocol) {
+        case IPPROTO_UDP:  return "IPPROTO_UDP";  break;
+        case IPPROTO_TCP: return "IPPROTO_TCP"; break;
+        default:       return "unknown";  break;
+        }
 }
 
 
 
 static int init_srv_socket(const struct opts *opts)
 {
-	int ret, fd = -1, on = 1;
-	struct addrinfo hosthints, *hostres, *addrtmp;
-	struct protoent *protoent;
+        int ret, fd = -1, on = 1;
+        struct addrinfo hosthints, *hostres, *addrtmp;
+        struct protoent *protoent;
 
-	memset(&hosthints, 0, sizeof(struct addrinfo));
+        memset(&hosthints, 0, sizeof(struct addrinfo));
 
-	hosthints.ai_family   = opts->af_family;
-	hosthints.ai_socktype = opts->ai_socktype;
-	hosthints.ai_protocol = opts->ai_protocol;
+        hosthints.ai_family   = opts->af_family;
+        hosthints.ai_socktype = opts->ai_socktype;
+        hosthints.ai_protocol = opts->ai_protocol;
 #if defined(WIN32)
-	hosthints.ai_flags    = AI_PASSIVE;
+        hosthints.ai_flags    = AI_PASSIVE;
 #else
-	hosthints.ai_flags    = AI_ADDRCONFIG | AI_PASSIVE;
+        hosthints.ai_flags    = AI_ADDRCONFIG | AI_PASSIVE;
 #endif
 
-	xgetaddrinfo(opts->bind_addr, opts->port, &hosthints, &hostres);
+        xgetaddrinfo(opts->bind_addr, opts->port, &hosthints, &hostres);
 
-	for (addrtmp = hostres; addrtmp != NULL ; addrtmp = addrtmp->ai_next) {
-		fd = socket(addrtmp->ai_family, addrtmp->ai_socktype, addrtmp->ai_protocol);
-		if (fd < 0)
-			continue;
+        for (addrtmp = hostres; addrtmp != NULL ; addrtmp = addrtmp->ai_next) {
+                fd = socket(addrtmp->ai_family, addrtmp->ai_socktype, addrtmp->ai_protocol);
+                if (fd < 0)
+                        continue;
 
-		protoent = getprotobynumber(addrtmp->ai_protocol);
-		if (protoent)
-			pr_debug("socket created - protocol %s(%d)",
-					protoent->p_name, protoent->p_proto);
+                protoent = getprotobynumber(addrtmp->ai_protocol);
+                if (protoent)
+                        pr_debug("socket created - protocol %s(%d)",
+                                        protoent->p_name, protoent->p_proto);
 
 
-		/* For multicast sockets it is maybe necessary to set
-		 * socketoption SO_REUSEADDR, cause multiple receiver on
-		 * the same host will bind to this local socket.
-		 * In all other cases: there is no penalty - hopefully! ;-)
-		 */
-		xsetsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on), "SO_REUSEADDR");
+                /* For multicast sockets it is maybe necessary to set
+                 * socketoption SO_REUSEADDR, cause multiple receiver on
+                 * the same host will bind to this local socket.
+                 * In all other cases: there is no penalty - hopefully! ;-)
+                 */
+                xsetsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on), "SO_REUSEADDR");
 
-		ret = bind(fd, addrtmp->ai_addr, (int)addrtmp->ai_addrlen);
-		if (ret) {
-			err_sys("bind failed");
+                ret = bind(fd, addrtmp->ai_addr, (int)addrtmp->ai_addrlen);
+                if (ret) {
+                        err_sys("bind failed");
                         xclose(fd);
                         fd = -1;
-			continue;
-		}
+                        continue;
+                }
 
-		if (opts->ai_protocol == IPPROTO_TCP) {
-			ret = listen(fd, 1);
-			if (ret < 0) {
-				err_sys("bind failed");
-				xclose(fd);
-				fd = -1;
-				continue;
-			}
-		}
+                if (opts->ai_protocol == IPPROTO_TCP) {
+                        ret = listen(fd, 1);
+                        if (ret < 0) {
+                                err_sys("bind failed");
+                                xclose(fd);
+                                fd = -1;
+                                continue;
+                        }
+                }
 
-		/* great, found a valuable socket */
-		break;
-	}
+                /* great, found a valuable socket */
+                break;
+        }
 
-	if (fd < 0)
-		err_msg_die(EXIT_FAILNET,
-				"Don't found a suitable socket to connect to the client"
-				", giving up");
+        if (fd < 0)
+                err_msg_die(EXIT_FAILNET,
+                                "Don't found a suitable socket to connect to the client"
+                                ", giving up");
 
     if (is_format_human(opts->format)) {
-		msg("bind to port %s via %s using %s socket [%s:%s]",
-			opts->port, network_protocol_str(opts->ai_protocol),
-			network_family_str(addrtmp->ai_family),
-			addrtmp->ai_family == AF_INET ? "0.0.0.0" : "::", opts->port);
-	}
+                msg("bind to port %s via %s using %s socket [%s:%s]",
+                        opts->port, network_protocol_str(opts->ai_protocol),
+                        network_family_str(addrtmp->ai_family),
+                        addrtmp->ai_family == AF_INET ? "0.0.0.0" : "::", opts->port);
+        }
 
-	freeaddrinfo(hostres);
+        freeaddrinfo(hostres);
 
-	return fd;
+        return fd;
 }
 
 
 static void die_version(void)
 {
-	printf(PROGRAMNAME " - " VERSIONSTRING "\n");
-	exit(EXIT_SUCCESS);
+        printf(PROGRAMNAME " - " VERSIONSTRING "\n");
+        exit(EXIT_SUCCESS);
 }
 
 
@@ -705,95 +712,98 @@ static void print_usage(const char *me)
                 "   --transport (-t) <tcp | udp>\n\tspecify what transport protocol should be used: TCP or UDP\n"
                 "   --port (-p) <port>\n\tdestination port of connection (default: 5001) \n"
                 "   --bind, -b <bind-addr>\n\tlocal address to bind on\n"
-                "   --setsockopt (-S) <option:arg1:arg2:...>\n\tset the socketoption \"option\" with argument arg1, arg2, ...\n"
+                "   --setsockopt (-S) <option:arg1:arg2:...>\n\tset the socket option \"option\" with argument arg1, arg2, ...\n"
                 "   --format (-f) <json | human>\n\tControl output format, human is default\n"
                 "   --report (-) <json | human>\n\tControl output format, human is default\n"
-		"   --verbose (-v)\n\tverbose output to STDOUT, the more -v the more verbose\n",
+                "   --verbose (-v)\n\tverbose output to STDOUT, the more -v the more verbose\n"
+                "   --continue (-c)\n\tfor UDP socket print JSON data for each received packet\n",
                 me);
 }
 
 
 int main(int ac, char *av[])
 {
-	int socket_fd, c, ret;
-	struct opts opts;
+        int socket_fd, c, ret;
+        struct opts opts;
 
-	memset(&opts, 0, sizeof(opts));
+        memset(&opts, 0, sizeof(opts));
 
-	opts.port             = DEFAULT_PORT;
-	opts.packet_interval  = DEFAULT_PACKET_INTERVAL;
-	opts.packet_size      = DEFAULT_PACKET_SIZE;
-	opts.ai_socktype      = DEFAULT_AI_SOCKTYPE;
-	opts.ai_protocol      = DEFAULT_AI_PROTOCOL;
-	opts.af_family        = AF_UNSPEC;
-	opts.iteration_limit  = 0;
-	opts.port             = strdup(DEFAULT_PORT);
+        opts.port             = DEFAULT_PORT;
+        opts.packet_interval  = DEFAULT_PACKET_INTERVAL;
+        opts.packet_size      = DEFAULT_PACKET_SIZE;
+        opts.ai_socktype      = DEFAULT_AI_SOCKTYPE;
+        opts.ai_protocol      = DEFAULT_AI_PROTOCOL;
+        opts.af_family        = AF_UNSPEC;
+        opts.iteration_limit  = 0;
+        opts.port             = strdup(DEFAULT_PORT);
         opts.bind_addr        = NULL;
         opts.format           = FORMAT_DEFAULT;
+        opts.continue_out     = 0;
 
-	init_network_stack();
+        init_network_stack();
 
-	while (1) {
-		int option_index = 0;
-		static struct option long_options[] = {
-			{"verbose",      0, 0, 'v'},
-			{"version",      0, 0, 'V'},
-			{"ipv4",         1, 0, '4'},
-			{"ipv6",         1, 0, '6'},
-			{"port",         1, 0, 'p'},
-			{"help",         1, 0, 'h'},
-			{"transport",    1, 0, 't'},
-			{"setsockopt",   1, 0, 'S'},
+        while (1) {
+                int option_index = 0;
+                static struct option long_options[] = {
+                        {"verbose",      0, 0, 'v'},
+                        {"version",      0, 0, 'V'},
+                        {"ipv4",         1, 0, '4'},
+                        {"ipv6",         1, 0, '6'},
+                        {"port",         1, 0, 'p'},
+                        {"help",         1, 0, 'h'},
+                        {"transport",    1, 0, 't'},
+                        {"setsockopt",   1, 0, 'S'},
                         {"bind",         1, 0, 'b'},
                         {"format",       1, 0, 'f'},
-			{0, 0, 0, 0}
-		};
-                c = xgetopt_long(ac, av, "p:b:t:S:f:vh46V",
-				long_options, &option_index);
-		if (c == -1)
-			break;
+                        {"continue",     0, 0, 'c'},
+                        {0, 0, 0, 0}
+                };
+                c = xgetopt_long(ac, av, "p:b:t:S:f:vh46Vc",
+                                long_options, &option_index);
+                if (c == -1)
+                        break;
 
-		switch (c) {
-			case 'V':
-				die_version();
-				break;
-			case '4':
-				opts.af_family = AF_INET;
-				break;
-			case '6':
-				opts.af_family = AF_INET6;
-				break;
-			case 'v':
-				opts.verbose_level++;
-				break;
-			case 'p':
-				free((void *)opts.port);
-				opts.port = strdup(optarg);
-				break;
+                switch (c) {
+                        case 'V':
+                                die_version();
+                                break;
+                        case '4':
+                                opts.af_family = AF_INET;
+                                break;
+                        case '6':
+                                opts.af_family = AF_INET6;
+                                break;
+                        case 'v':
+                                opts.verbose_level++;
+                                break;
+                        case 'p':
+                                free((void *)opts.port);
+                                opts.port = strdup(optarg);
+                                break;
                         case 'b':
                                 opts.bind_addr = strdup(optarg);
                                 break;
-			case 'S':
-				ret = optarg_set_socketopts(optarg, socket_options);
-				if (ret != SUCCESS) {
-					err_msg("socket option %s not supported", optarg);
-					print_usage(av[0]);
-					exit(EXIT_FAILOPT);
-				}
-				break;
-			case 't':
-				if (!strcasecmp("tcp", optarg)) {
-					opts.ai_socktype = SOCK_STREAM;
-					opts.ai_protocol = IPPROTO_TCP;
-				} else if (!strcasecmp("udp", optarg)) {
-					opts.ai_socktype = SOCK_DGRAM;
-					opts.ai_protocol = IPPROTO_UDP;
-				} else {
-					err_msg("protocol %s not supported", optarg);
-					print_usage(av[0]);
-					exit(EXIT_FAILOPT);
-				}
-				break;
+                        case 'S':
+                                ret = optarg_set_socketopts(optarg, socket_options);
+                                if (ret != SUCCESS) {
+                                        err_msg("socket option %s not supported", optarg);
+                                        print_usage(av[0]);
+                                        exit(EXIT_FAILOPT);
+                                }
+                                break;
+                        case 't':
+                                if (!strcasecmp("tcp", optarg)) {
+                                        opts.ai_socktype = SOCK_STREAM;
+                                        opts.ai_protocol = IPPROTO_TCP;
+                                } else if (!strcasecmp("udp", optarg)) {
+                                        opts.ai_socktype = SOCK_DGRAM;
+                                        opts.ai_protocol = IPPROTO_UDP;
+                                } else {
+                                        err_msg("protocol %s not supported", optarg);
+                                        print_usage(av[0]);
+                                        exit(EXIT_FAILOPT);
+                                }
+                                break;
                         case 'f':
                                 if (!strcasecmp("json", optarg)) {
                                         opts.format  = FORMAT_JSON;
@@ -807,48 +817,51 @@ int main(int ac, char *av[])
                                         exit(EXIT_FAILOPT);
                                 }
                                 break;
-			case 'h':
-				print_usage(av[0]);
-				exit(EXIT_SUCCESS);
-				break;
-			case '?':
-				break;
+                        case 'c':
+                                opts.continue_out = 1;
+                                break;
+                        case 'h':
+                                print_usage(av[0]);
+                                exit(EXIT_SUCCESS);
+                                break;
+                        case '?':
+                                break;
 
-			default:
-				err_msg("getopt returned character code 0%o ?", c);
-				return EXIT_FAILURE;
-		}
-	}
+                        default:
+                                err_msg("getopt returned character code 0%o ?", c);
+                                return EXIT_FAILURE;
+                }
+        }
 
     if (is_format_human(opts.format))
-		msg(PROGRAMNAME " - " VERSIONSTRING);
+                msg(PROGRAMNAME " - " VERSIONSTRING);
 
     if (is_format_human(opts.format))
-		msg("initialize server socket");
-	socket_fd = init_srv_socket(&opts);
+                msg("initialize server socket");
+        socket_fd = init_srv_socket(&opts);
 
-	/* set all previously set socket option */
-	set_socketopts(socket_fd, opts.ai_protocol);
+        /* set all previously set socket option */
+        set_socketopts(socket_fd, opts.ai_protocol);
 
         flow_id_stat_table_init(&opts);
 
-	switch (opts.ai_protocol) {
-	case IPPROTO_TCP:
-		while (!opts.iteration_limit || opts.iterations--)
-			process_cli_request_tcp(socket_fd, &opts);
-		break;
-	case IPPROTO_UDP:
-		while (!opts.iteration_limit || opts.iterations--)
-			process_cli_request_udp(&opts, socket_fd);
-		break;
-	default:
-		err_msg("programmed error in switch/case label");
-		break;
-	}
+        switch (opts.ai_protocol) {
+        case IPPROTO_TCP:
+                while (!opts.iteration_limit || opts.iterations--)
+                        process_cli_request_tcp(socket_fd, &opts);
+                break;
+        case IPPROTO_UDP:
+                while (!opts.iteration_limit || opts.iterations--)
+                        process_cli_request_udp(&opts, socket_fd);
+                break;
+        default:
+                err_msg("programmed error in switch/case label");
+                break;
+        }
 
-	xclose(socket_fd);
+        xclose(socket_fd);
 
-	fini_network_stack();
+        fini_network_stack();
 
     return EXIT_SUCCESS;
 }

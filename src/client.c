@@ -34,7 +34,6 @@ enum {
 #define DEFAULT_PAYLOAD_PATTERN PAYLOAD_PATTERN_STATIC
 #define DSCP_UNMODIFIED UINT_MAX
 
-
 struct opts {
 	char *hostname;
 	char *bind_addr;
@@ -61,7 +60,9 @@ struct opts {
 
 	unsigned int dscp;
 
-        unsigned int format;
+    unsigned int format;
+
+    int ignore_socket_errors;
 };
 
 
@@ -110,7 +111,7 @@ static int tx_data(struct opts *o, int header_format, char *packet, int fd, int 
 	}
 
 	ret = write_len(fd, packet, size);
-	if (ret != SUCCESS) {
+	if (ret != SUCCESS && !o->ignore_socket_errors) {
 		err_msg("failure in socket write operation");
 		return FAILURE;
 	}
@@ -247,8 +248,9 @@ static int init_cli_socket(struct opts *opts)
 		if (opts->bind_addr) {
 			ret = bind_client_socket(opts, fd);
 			if (ret != 0) {
-				pr_debug("Cannot bind");
-				close(fd);
+				err_msg("Cannot bind to %s", opts->bind_addr);
+				xclose(fd);
+                                fd = -1;
 				continue;
 			}
 		}
@@ -301,9 +303,9 @@ static void print_usage(const char *me)
                         "   --transport (-t) <tcp | udp>\n\tspecify what transport protocol should be used: TCP or UDP\n"
                         "   --port (-p) <port>\n\tdestination port of connection (default: 5001) \n"
 			"   --interval (-i)\n\tinterval between the generation (and reception) of packets in us\n"
-			"   --iterations (-n) <number>\n\tlimit the number of transmissions\n"
-			"   --txpacketsize (-s) <number>\n\tsize of the generated packet (excluding TCP/IP header)\n"
-			"   --rxpacketsize (-r) <number>\n\tsize of the received packet (excluding TCP/IP header)\n"
+                        "   --iterations (-n) <number>\n\tlimit the number of transmissions (0: no limitations, endless)\n"
+			"   --txpacketsize (-s) <number>\n\tsize of the generated packet (excluding TCP/IP header, byte)\n"
+			"   --rxpacketsize (-r) <number>\n\tsize of the received packet (excluding TCP/IP header, byte)\n"
 			"   --server-delay (-d) <number>\n\tnumber of us until the server echo the data back\n"
 			"   --server-delay-variation (-D) <number>\n\tnumber of additional us which are random add the server echo the data back\n"
 			"   --check (-c)\n\tcheck payload for bit errors\n"
@@ -311,17 +313,18 @@ static void print_usage(const char *me)
 			"   --setsockopt (-S) <option:arg1:arg2:...>\n\tset the socket option \"option\" with argument arg1, arg2, ...\n"
                         "   --random (-R) <min (byte):max (byte):bw (bit/s)>\n\tgenerator to generate randomly generated traffic pattern\n"
 			"      \t(e.g. -R 100:500:5000kbit)\n"
-                        "   --payload-pattern <static | ascii-random | random | random-reduced>\n\tconfigures the packet payload pattern\n"
-                        "   --bind (b) <address>\n\tbind socket to local address\n"
-                        "   --dscp (C) <value>\n\tset DSCP (Diffserv) value (currently only supported for Linux)\n"
+            "   --payload-pattern <static | ascii-random | random | random-reduced>\n\tconfigures the packet payload pattern\n"
+            "   --bind (b) <address>\n\tbind socket to local address\n"
+            "   --dscp (C) <value>\n\tset DSCP (Diffserv) value (currently only supported for Linux)\n"
 			"   --verbose (-v)\n\tverbose output to STDOUT, the more -v the more verbose\n"
-                        "   --format (-f) <json | human>\n\tControl output format, human is default\n"
+            "   --format (-f) <json | human>\n\tControl output format, human is default\n"
+            "   --ignore-socket-errors (-X)\n\tIgnore transmission error (e.g. hibernated NIC, ...)\n"
 			"\n"
 			"Examples:\n"
 			"   ipproof-client -4 -vv -e example.com -r 0 -t udp -R 1000:1000:5000kbit\n"
 			"   IPv4/UDP to example.com, no data back, send 1000byte packet with 5000kbit/s\n\n"
-                        "   ipproof-client -4 -e example.com -t tcp -s 10000 -r 10 -n 1\n"
-                        "   IPv4/TCP to example.com, 10byte back, send 10000 byte, one iteration\n"
+            "   ipproof-client -4 -e example.com -t tcp -s 10000 -r 10 -n 1\n"
+            "   IPv4/TCP to example.com, 10byte back, send 10000 byte, one iteration\n"
 			"\n", me);
 }
 
@@ -436,7 +439,8 @@ static void print_opts(struct opts *opts)
 	msg("    RX packetsize:     %d", opts->rx_packet_size);
 	msg("    Port:              %s", opts->port);
 	msg("    Payload-pattern:   %s", rand_val_str(opts->payload_pattern));
-        msg("    Format:            %s", format_str(opts->format));
+    msg("    Format:            %s", format_str(opts->format));
+    msg("    Ignore errors:     %s", opts->ignore_socket_errors ? "yes" : "no");
 }
 
 
@@ -463,7 +467,8 @@ static int xgetopts(int ac, char **av, struct opts *opts)
 	opts->bind_addr        = NULL;
 	opts->payload_pattern  = DEFAULT_PAYLOAD_PATTERN;
 	opts->dscp             = DSCP_UNMODIFIED;
-        opts->format           = FORMAT_DEFAULT;
+    opts->format           = FORMAT_DEFAULT;
+    opts->ignore_socket_errors = 0;
 
 	while (1) {
 		static struct option long_options[] = {
@@ -487,11 +492,12 @@ static int xgetopts(int ac, char **av, struct opts *opts)
 			{"bind",            1, 0, 'b'},
 			{"payload-pattern", 1, 0, 'P'},
 			{"dscp",            1, 0, 'C'},
-                        {"format",          1, 0, 'f'},
+            {"format",          1, 0, 'f'},
+            {"ignore-socket-errors", 0, 0, 'X'},
 			{0, 0, 0, 0}
 		};
 
-                c = xgetopt_long(ac, av, "t:i:s:t:e:p:P:n:d:D:r:S:R:b:C:f:vhc46V",
+                c = xgetopt_long(ac, av, "t:i:s:t:e:p:P:n:d:D:r:S:R:b:C:f:vhc46VX",
 				 long_options, &option_index);
 		if (c == -1)
 			break;
@@ -614,6 +620,9 @@ static int xgetopts(int ac, char **av, struct opts *opts)
                                         exit(EXIT_FAILOPT);
                                 }
                                 break;
+			case 'X':
+				opts->ignore_socket_errors = 1;
+				break;
 			case '?':
 				break;
 
