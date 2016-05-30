@@ -9,3 +9,11 @@ win/win.ncb
 win/win.suo
 
 src/.*
+
+# Ignore windows specific files
+Documentation/thumbs.db
+win/backup/
+win/server/server.vcxproj
+win/server/server.vcxproj.filters
+win/upgradelog.htm
+win/win.v11.suo
